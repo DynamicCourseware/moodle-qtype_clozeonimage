@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<XMLDB PATH="question/type/clozeonimage/db" VERSION="20260910" COMMENT="XMLDB file for qtype_clozeonimage"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:noNamespaceSchemaLocation="../../../../lib/xmldb/xmldb.xsd">
+  <TABLES>
+    <TABLE NAME="qtype_clozeonimage" COMMENT="Options for Cloze on Image questions">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="questionid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="sequence" TYPE="text" NOTNULL="true" SEQUENCE="false" COMMENT="Comma-separated IDs of wrapped Cloze subquestions"/>
+        <FIELD NAME="displaymode" TYPE="int" LENGTH="2" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="0 original size; 1 fit width"/>
+        <FIELD NAME="displaywidth" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Stored composition width in CSS pixels; 0 means intrinsic width"/>
+        <FIELD NAME="controlappearance" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Answer control appearance: 0 translucent; 1 opaque"/>
+        <FIELD NAME="aftertext" TYPE="text" NOTNULL="true" SEQUENCE="false" COMMENT="Text displayed after the image composition"/>
+        <FIELD NAME="aftertextformat" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="1" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="questionid" TYPE="foreign-unique" FIELDS="questionid" REFTABLE="question" REFFIELDS="id"/>
+      </KEYS>
+    </TABLE>
+    <TABLE NAME="qtype_clozeonimage_pos" COMMENT="Positions of Cloze subquestions on the image">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="questionid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="no" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Sequential subquestion number"/>
+        <FIELD NAME="xleft" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="ytop" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="anchor" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="4" SEQUENCE="false" COMMENT="Control anchor from top left (0) to bottom right (8)"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="questionid" TYPE="foreign" FIELDS="questionid" REFTABLE="question" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="question-no" UNIQUE="true" FIELDS="questionid, no"/>
+      </INDEXES>
+    </TABLE>
+  </TABLES>
+</XMLDB>
