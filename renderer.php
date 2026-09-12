@@ -28,6 +28,8 @@ global $CFG;
 require_once($CFG->dirroot . '/question/type/multianswer/renderer.php');
 require_once($CFG->dirroot . '/question/type/clozeonimage/textfield_renderer.php');
 require_once($CFG->dirroot . '/question/type/clozeonimage/multichoice_inline_renderer.php');
+require_once($CFG->dirroot . '/question/type/clozeonimage/multichoice_renderer.php');
+require_once($CFG->dirroot . '/question/type/clozeonimage/multiresponse_renderer.php');
 
 /**
  * Main Cloze on Image renderer.
@@ -133,11 +135,17 @@ class qtype_clozeonimage_renderer extends qtype_multianswer_renderer {
             $renderer = $this->page->get_renderer('qtype_clozeonimage', 'textfield');
             return $renderer->subquestion($qa, $options, $index, $subq);
         }
-        if (
-            $subtype === 'multichoice' && !($subq instanceof qtype_multichoice_multi_question) &&
-                (int) $subq->layout === qtype_multichoice_base::LAYOUT_DROPDOWN
-        ) {
-            $renderer = $this->page->get_renderer('qtype_clozeonimage', 'multichoice_inline');
+        if ($subtype === 'multichoice') {
+            if (
+                !($subq instanceof qtype_multichoice_multi_question) &&
+                    (int) $subq->layout === qtype_multichoice_base::LAYOUT_DROPDOWN
+            ) {
+                $renderer = $this->page->get_renderer('qtype_clozeonimage', 'multichoice_inline');
+            } else if ($subq instanceof qtype_multichoice_multi_question) {
+                $renderer = $this->page->get_renderer('qtype_clozeonimage', 'multiresponse');
+            } else {
+                $renderer = $this->page->get_renderer('qtype_clozeonimage', 'multichoice');
+            }
             return $renderer->subquestion($qa, $options, $index, $subq);
         }
         return parent::subquestion($qa, $options, $index, $subq);

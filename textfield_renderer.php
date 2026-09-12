@@ -62,7 +62,8 @@ class qtype_clozeonimage_textfield_renderer extends qtype_multianswer_subq_rende
             }
         }
 
-        $size = max(1, core_text::strlen(trim($response ?? '')) + 1);
+        // Keep the positioned control's width stable when a submitted response is rendered again.
+        $size = 1;
         foreach ($subq->answers as $ans) {
             $size = max($size, core_text::strlen(trim($ans->answer)));
         }
@@ -146,6 +147,7 @@ class qtype_clozeonimage_textfield_renderer extends qtype_multianswer_subq_rende
         }
 
         $this->page->requires->js_call_amd('qtype_multianswer/feedback', 'initPopovers');
+        $this->page->requires->js_call_amd('qtype_clozeonimage/feedback', 'init');
 
         return html_writer::link('#', $icon, [
             'role' => 'button',

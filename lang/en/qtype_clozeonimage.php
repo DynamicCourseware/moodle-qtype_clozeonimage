@@ -57,6 +57,7 @@ $string['displaywidthpx'] = 'Image width (px)';
 $string['displaywidthrange'] = 'Enter an image width between {$a->min} and {$a->max} pixels.';
 $string['displaywidthrangecompact'] = '{$a->min}–{$a->max} px';
 $string['displaywidthsinglecompact'] = '{$a} px';
+$string['feedbackforsubquestion'] = 'Feedback for subquestion {$a}';
 $string['imageheader'] = 'Image';
 $string['invalidnumericalresponse'] = 'Please enter a valid number.';
 $string['invalidnumericalresponses'] = 'One or more Numerical responses are invalid.';

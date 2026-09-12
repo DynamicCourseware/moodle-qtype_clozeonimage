@@ -50,6 +50,7 @@ class qtype_clozeonimage_multichoice_inline_renderer extends qtype_multianswer_m
         }
 
         $this->page->requires->js_call_amd('qtype_multianswer/feedback', 'initPopovers');
+        $this->page->requires->js_call_amd('qtype_clozeonimage/feedback', 'init');
 
         return html_writer::link('#', $icon, [
             'role' => 'button',
