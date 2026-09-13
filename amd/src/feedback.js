@@ -14,67 +14,104 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Manage persistent inline-feedback disclosure for positioned choice controls.
+ * Coordinate feedback popovers for positioned Cloze on Image controls.
  *
  * @module     qtype_clozeonimage/feedback
  * @copyright  2026 DynamicCourseware.org (Dominique Bauer)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-define([], function() {
+define(['bootstrap'], function(Bootstrap) {
 
     'use strict';
 
-    const regionSelector = '[data-region="clozeonimage-choice-feedback"]';
-    const triggerSelector = '[data-region="clozeonimage-feedback-trigger"]';
-    const popoverTriggerSelector = '.que.clozeonimage .feedbacktrigger[data-bs-toggle="popover"]';
-    const openClass = 'qtype-clozeonimage-feedback-open';
-    const dismissedClass = 'qtype-clozeonimage-feedback-dismissed';
+    const triggerSelector =
+        '.que.clozeonimage .qtype-clozeonimage-feedback-trigger[data-bs-toggle="popover"]';
+    const feedbackRegionSelector = '.qtype-clozeonimage-feedback-region';
+    const activeRegionClass = 'qtype-clozeonimage-feedback-active';
     let initialised = false;
-    let activeTrigger = null;
+    let transientTrigger = null;
+    let pinnedTrigger = null;
+    const visibleTriggers = new Set();
 
     /**
-     * Synchronise the persistent disclosure state for one feedback region.
+     * Hide one feedback popover and optionally remove focus from its trigger.
      *
-     * @param {HTMLElement} region Feedback region.
-     * @param {Boolean} open Whether the region is persistently open.
+     * @param {HTMLElement|null} trigger Feedback trigger.
+     * @param {Boolean} blur Whether the trigger should lose focus.
      */
-    const setOpen = (region, open) => {
-        region.classList.toggle(openClass, open);
-        setExpanded(region, open);
-    };
-
-    /**
-     * Synchronise aria-expanded across equivalent triggers in one region.
-     *
-     * @param {HTMLElement} region Feedback region.
-     * @param {Boolean} expanded Whether the feedback is currently exposed.
-     */
-    const setExpanded = (region, expanded) => {
-        region.querySelectorAll(triggerSelector).forEach(trigger => {
-            trigger.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-        });
-    };
-
-    /**
-     * Close all persistently open feedback except an optional region.
-     *
-     * @param {HTMLElement|null} except Region to leave unchanged.
-     * @param {Boolean} dismiss Whether to suppress transient hover/focus display.
-     */
-    const closeAll = (except = null, dismiss = false) => {
-        document.querySelectorAll(`${regionSelector}.${openClass}`).forEach(region => {
-            if (region !== except) {
-                setOpen(region, false);
-                region.classList.toggle(dismissedClass, dismiss);
-            }
-        });
-        if (!except) {
-            activeTrigger = null;
+    const close = (trigger, blur = false) => {
+        if (!trigger) {
+            return;
+        }
+        if (pinnedTrigger === trigger) {
+            pinnedTrigger = null;
+        }
+        Bootstrap.Popover.getInstance(trigger)?.hide();
+        if (blur && document.activeElement === trigger) {
+            trigger.blur();
+        }
+        if (transientTrigger === trigger) {
+            transientTrigger = null;
         }
     };
 
     /**
-     * Initialise event-delegated feedback disclosure.
+     * Make one trigger transiently active without disturbing a pinned trigger.
+     *
+     * @param {HTMLElement} trigger Feedback trigger.
+     */
+    const activateTransient = trigger => {
+        if (trigger === pinnedTrigger) {
+            close(transientTrigger);
+            return;
+        }
+        if (transientTrigger && transientTrigger !== trigger) {
+            close(transientTrigger, document.activeElement === transientTrigger);
+        }
+        transientTrigger = trigger;
+    };
+
+    /**
+     * Prevent Bootstrap's hover/focus handlers from hiding a click-pinned popover.
+     *
+     * @param {Event} event Popover hide event.
+     */
+    const preventPinnedHide = event => {
+        if (event.target === pinnedTrigger) {
+            event.preventDefault();
+        }
+    };
+
+    /**
+     * Mark the owning feedback region active when its popover is visible.
+     *
+     * @param {Event} event Popover shown event.
+     */
+    const popoverShown = event => {
+        visibleTriggers.add(event.target);
+        event.target.closest(feedbackRegionSelector)?.classList.add(activeRegionClass);
+    };
+
+    /**
+     * Forget a transient trigger after Bootstrap has hidden its popover.
+     *
+     * @param {Event} event Popover hidden event.
+     */
+    const popoverHidden = event => {
+        if (event.target === transientTrigger) {
+            transientTrigger = null;
+        }
+        visibleTriggers.delete(event.target);
+        const region = event.target.closest(feedbackRegionSelector);
+        if (region && !Array.from(visibleTriggers).some(
+            trigger => trigger.closest(feedbackRegionSelector) === region
+        )) {
+            region.classList.remove(activeRegionClass);
+        }
+    };
+
+    /**
+     * Initialise event-delegated popover coordination.
      */
     const init = () => {
         if (initialised) {
@@ -82,68 +119,48 @@ define([], function() {
         }
         initialised = true;
 
-        document.addEventListener('click', event => {
-            const trigger = event.target.closest(triggerSelector);
-            if (!trigger) {
-                if (event.target.closest(`${regionSelector}.${openClass}`)) {
-                    return;
-                }
-                closeAll(null, true);
-                return;
-            }
-
-            const region = trigger.closest(regionSelector);
-            if (!region) {
-                return;
-            }
-            event.preventDefault();
-            closeAll(region, true);
-            region.classList.remove(dismissedClass);
-            setOpen(region, true);
-            activeTrigger = trigger;
-        });
+        document.addEventListener('hide.bs.popover', preventPinnedHide, true);
+        document.addEventListener('shown.bs.popover', popoverShown, true);
+        document.addEventListener('hidden.bs.popover', popoverHidden, true);
 
         document.addEventListener('focusin', event => {
             const trigger = event.target.closest(triggerSelector);
-            if (!trigger) {
-                return;
-            }
-            const region = trigger.closest(regionSelector);
-            if (region) {
-                closeAll(region, true);
-                region.classList.remove(dismissedClass);
-                setExpanded(region, true);
-            }
-        });
-
-        document.addEventListener('focusout', event => {
-            const trigger = event.target.closest(triggerSelector);
-            if (!trigger) {
-                return;
-            }
-            const region = trigger.closest(regionSelector);
-            if (region && !region.classList.contains(openClass)) {
-                setExpanded(region, false);
+            if (trigger) {
+                activateTransient(trigger);
             }
         });
 
         document.addEventListener('pointerover', event => {
             const trigger = event.target.closest(triggerSelector);
-            if (!trigger) {
-                return;
-            }
-            const region = trigger.closest(regionSelector);
-            if (region) {
-                closeAll(region, true);
-                region.classList.remove(dismissedClass);
+            if (trigger) {
+                activateTransient(trigger);
             }
         });
 
-        document.addEventListener('pointerout', event => {
+        document.addEventListener('click', event => {
             const trigger = event.target.closest(triggerSelector);
-            if (trigger && !trigger.contains(event.relatedTarget)) {
-                trigger.closest(regionSelector)?.classList.remove(dismissedClass);
+
+            if (pinnedTrigger) {
+                const previouslyPinned = pinnedTrigger;
+                close(previouslyPinned, document.activeElement === previouslyPinned);
+                if (!trigger || trigger === previouslyPinned) {
+                    close(transientTrigger, document.activeElement === transientTrigger);
+                    return;
+                }
             }
+
+            if (trigger) {
+                if (transientTrigger && transientTrigger !== trigger) {
+                    close(transientTrigger, document.activeElement === transientTrigger);
+                }
+                if (transientTrigger === trigger) {
+                    transientTrigger = null;
+                }
+                pinnedTrigger = trigger;
+                Bootstrap.Popover.getOrCreateInstance(trigger).show();
+                return;
+            }
+            close(transientTrigger, true);
         });
 
         document.addEventListener('keydown', event => {
@@ -151,27 +168,13 @@ define([], function() {
                 return;
             }
 
-            const popoverTrigger = event.target.closest(popoverTriggerSelector);
-            if (popoverTrigger) {
-                popoverTrigger.blur();
+            const eventTrigger = event.target.closest(triggerSelector);
+            const trigger = eventTrigger ?? transientTrigger ?? pinnedTrigger;
+            if (!trigger) {
                 return;
             }
-
-            const trigger = event.target.closest(triggerSelector);
-            const region = trigger?.closest(regionSelector) ??
-                document.querySelector(`${regionSelector}.${openClass}`);
-            if (!region) {
-                return;
-            }
-            setOpen(region, false);
-            region.classList.add(dismissedClass);
-            const focusedElement = document.activeElement;
-            if (focusedElement instanceof HTMLElement && region.contains(focusedElement)) {
-                focusedElement.blur();
-            } else if (activeTrigger?.isConnected) {
-                activeTrigger.blur();
-            }
-            activeTrigger = null;
+            event.preventDefault();
+            close(trigger, true);
         });
     };
 

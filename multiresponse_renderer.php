@@ -23,17 +23,10 @@
  */
 
 /**
- * Render vertical and horizontal Multiple Response controls with disclosed inline feedback.
+ * Render vertical and horizontal Multiple Response controls with unified review feedback.
  */
 class qtype_clozeonimage_multiresponse_renderer extends qtype_multianswer_subq_renderer_base {
-    /** @var string[] IDs of all feedback elements controlled by each result trigger. */
-    private array $feedbackids = [];
-
-    /** @var int Number of focusable result triggers rendered for the subquestion. */
-    private int $triggercount = 0;
-
-    /** @var int Current subquestion number used in accessible result-trigger labels. */
-    private int $subquestionindex = 0;
+    use qtype_clozeonimage_feedback_renderer_trait;
 
     #[\Override]
     public function subquestion(
@@ -47,9 +40,7 @@ class qtype_clozeonimage_multiresponse_renderer extends qtype_multianswer_subq_r
         }
 
         $this->displayoptions = $options;
-        $this->feedbackids = [];
-        $this->triggercount = 0;
-        $this->subquestionindex = (int) $index;
+        $this->initialise_feedback_appearance($qa);
 
         $fieldprefix = 'sub' . $index . '_';
         $basename = $qa->get_qt_field_name($fieldprefix . 'choice');
@@ -62,15 +53,8 @@ class qtype_clozeonimage_multiresponse_renderer extends qtype_multianswer_subq_r
         }
 
         $order = $subq->get_order($qa);
-        $fraction = 0;
-        $hasselection = false;
-        foreach ($order as $value => $ansid) {
-            if ($subq->is_choice_selected($response, $value)) {
-                $hasselection = true;
-                $fraction += $subq->answers[$ansid]->fraction;
-            }
-        }
-        $answerfraction = $fraction > 0.999 ? 1.0 : 0.5;
+        $answered = $subq->is_complete_response($response);
+        [$fraction] = $subq->grade_response($response);
         $specificfeedback = [];
         foreach ($order as $value => $ansid) {
             $answer = $subq->answers[$ansid];
@@ -78,26 +62,52 @@ class qtype_clozeonimage_multiresponse_renderer extends qtype_multianswer_subq_r
                 $options->feedback && $subq->is_choice_selected($response, $value) &&
                     trim($answer->feedback)
             ) {
-                $feedbackid = $basename . $value . '-specificfeedback';
-                $this->feedbackids[] = $feedbackid;
-                $specificfeedback[$value] = html_writer::tag(
-                    'div',
-                    $subq->format_text(
+                $answertext = $subq->format_text(
+                    $answer->answer,
+                    $answer->answerformat,
+                    $qa,
+                    'question',
+                    'answer',
+                    $ansid
+                );
+                $specificfeedback[] = html_writer::div(
+                    html_writer::div($answertext, 'qtype-clozeonimage-feedback-choice') .
+                    html_writer::div($subq->format_text(
                         $answer->feedback,
                         $answer->feedbackformat,
                         $qa,
                         'question',
                         'answerfeedback',
                         $ansid
-                    ),
-                    ['class' => 'specificfeedback', 'id' => $feedbackid]
+                    ), 'qtype-clozeonimage-feedback-choice-text'),
+                    'qtype-clozeonimage-feedback-choice-item'
                 );
             }
         }
 
-        $outcome = $this->outcome($qa, $options, $subq, $fraction, $basename);
-        $fallbacktrigger = $this->feedbackids && !($options->correctness && $hasselection);
-        $firstchoice = array_key_first($order);
+        [$stateclass, $statustext] = $this->review_state($fraction, $answered, $options);
+        $correct = [];
+        foreach ($subq->answers as $answer) {
+            if (question_state::graded_state_for_fraction($answer->fraction) !== question_state::$gradedwrong) {
+                $correct[] = $subq->format_text(
+                    $answer->answer,
+                    $answer->answerformat,
+                    $qa,
+                    'question',
+                    'answer',
+                    $answer->id
+                );
+            }
+        }
+        $rightanswer = $correct ? '<ul><li>' . implode('</li><li>', $correct) . '</li></ul>' : '';
+        $feedbackpopup = $this->feedback_popup(
+            $subq,
+            $answered ? $fraction : null,
+            implode('', $specificfeedback),
+            $rightanswer,
+            $options
+        );
+
         $horizontal = (int) $subq->layout === qtype_multichoice_base::LAYOUT_HORIZONTAL;
         $inputattributes = [
             'type' => 'checkbox',
@@ -106,9 +116,17 @@ class qtype_clozeonimage_multiresponse_renderer extends qtype_multianswer_subq_r
         ];
         if ($options->readonly) {
             $inputattributes['disabled'] = 'disabled';
+        } else {
+            $inputattributes = $this->feedback_trigger_attributes($inputattributes, $feedbackpopup);
         }
 
-        $result = $this->choices_wrapper_start($horizontal);
+        $grouplabelid = $basename . '-label';
+        $grouplabel = $this->get_answer_label('multichoicex', 'qtype_multianswer');
+        if ($statustext !== '') {
+            $grouplabel .= ' ' . $statustext;
+        }
+        $result = html_writer::span($grouplabel, 'visually-hidden', ['id' => $grouplabelid]);
+        $result .= $this->choices_wrapper_start($horizontal);
         foreach ($order as $value => $ansid) {
             $answer = $subq->answers[$ansid];
             $inputattributes['name'] = $basename . $value;
@@ -121,13 +139,15 @@ class qtype_clozeonimage_multiresponse_renderer extends qtype_multianswer_subq_r
             }
 
             $class = 'form-check text-wrap text-break qtype-clozeonimage-choice';
-            $resulticon = '';
+            $localstate = null;
             if ($options->correctness && $isselected) {
-                $iconfraction = $answer->fraction > 0 ? $answerfraction : 0;
-                $class .= ' ' . $this->feedback_class($iconfraction);
-                $resulticon = $this->result_icon($this->feedback_image($iconfraction));
-            } else if ($fallbacktrigger && $value === $firstchoice) {
-                $resulticon = $this->feedback_trigger($this->output->pix_icon('i/info', ''), true);
+                if ($answer->fraction > 0) {
+                    $class .= ' correct';
+                    $localstate = question_state::$gradedright;
+                } else if ($answer->fraction < 0) {
+                    $class .= ' incorrect';
+                    $localstate = question_state::$gradedwrong;
+                }
             }
             if ($horizontal) {
                 $class .= ' form-check-inline';
@@ -135,118 +155,40 @@ class qtype_clozeonimage_multiresponse_renderer extends qtype_multianswer_subq_r
 
             $result .= $this->choice_wrapper_start($class, $horizontal);
             $control = html_writer::empty_tag('input', $inputattributes);
+            $choicelabel = $subq->format_text(
+                $answer->answer,
+                $answer->answerformat,
+                $qa,
+                'question',
+                'answer',
+                $ansid
+            );
+            if ($localstate !== null) {
+                $choicelabel .= html_writer::span(
+                    ' ' . $localstate->default_string(true),
+                    'visually-hidden'
+                );
+            }
             $control .= html_writer::tag(
                 'label',
-                $subq->format_text($answer->answer, $answer->answerformat, $qa, 'question', 'answer', $ansid),
+                $choicelabel,
                 ['for' => $inputattributes['id'], 'class' => 'form-check-label text-body']
             );
-            $control .= $resulticon;
             $result .= html_writer::span($control, 'qtype-clozeonimage-choice-control');
-            $result .= $specificfeedback[$value] ?? '';
             $result .= $this->choice_wrapper_end($horizontal);
         }
         $result .= $this->choices_wrapper_end($horizontal);
-        $result .= $outcome;
-
-        if ($this->triggercount > 0) {
-            $this->page->requires->js_call_amd('qtype_clozeonimage/feedback', 'init');
+        if ($options->readonly) {
+            $result .= $this->feedback_surface_button($feedbackpopup, (int) $index, $statustext);
         }
 
-        return html_writer::div($result, 'qtype-clozeonimage-choice-feedback', [
-            'data-region' => 'clozeonimage-choice-feedback',
-        ]);
-    }
-
-    /**
-     * Render the outcome below the complete Multiple Response group.
-     *
-     * @param question_attempt $qa Question attempt being rendered.
-     * @param question_display_options $options Display options.
-     * @param qtype_multichoice_multi_question $subq Subquestion being rendered.
-     * @param float $fraction Total response fraction.
-     * @param string $basename Unique input-name base used as the outcome ID prefix.
-     * @return string Rendered outcome, or an empty string.
-     */
-    private function outcome(
-        question_attempt $qa,
-        question_display_options $options,
-        qtype_multichoice_multi_question $subq,
-        float $fraction,
-        string $basename
-    ): string {
-        $feedback = [];
-        if (
-            $options->feedback && $options->marks >= question_display_options::MARK_AND_MAX &&
-                $subq->defaultmark > 0
-        ) {
-            $mark = new stdClass();
-            $mark->mark = format_float($fraction * $subq->defaultmark, $options->markdp);
-            $mark->max = format_float($subq->defaultmark, $options->markdp);
-            $feedback[] = html_writer::tag('div', get_string('markoutofmax', 'question', $mark));
+        $regionclass = 'qtype-clozeonimage-feedback-region';
+        if ($stateclass !== '') {
+            $regionclass .= ' qtype-clozeonimage-state-' . $stateclass;
         }
-
-        if ($options->rightanswer) {
-            $correct = [];
-            foreach ($subq->answers as $answer) {
-                if (
-                    question_state::graded_state_for_fraction($answer->fraction) !==
-                        question_state::$gradedwrong
-                ) {
-                    $correct[] = $subq->format_text(
-                        $answer->answer,
-                        $answer->answerformat,
-                        $qa,
-                        'question',
-                        'answer',
-                        $answer->id
-                    );
-                }
-            }
-            $correct = '<ul><li>' . implode('</li><li>', $correct) . '</li></ul>';
-            $feedback[] = get_string('correctansweris', 'qtype_multichoice', $correct);
-        }
-
-        if (!$feedback) {
-            return '';
-        }
-        $outcomeid = $basename . '-outcome';
-        $this->feedbackids[] = $outcomeid;
-        return html_writer::div(implode('<br />', $feedback), 'outcome', ['id' => $outcomeid]);
-    }
-
-    /**
-     * Render a correctness icon, making it a trigger when feedback content exists.
-     *
-     * @param string $icon Rendered Moodle correctness icon.
-     * @return string Rendered result icon or feedback trigger.
-     */
-    private function result_icon(string $icon): string {
-        if ($this->feedbackids) {
-            return $this->feedback_trigger($icon);
-        }
-        return html_writer::span($icon, 'qtype-clozeonimage-choice-result-icon');
-    }
-
-    /**
-     * Render a native feedback-disclosure button.
-     *
-     * @param string $icon Rendered Moodle result or information icon.
-     * @param bool $group Whether this is a group-level fallback trigger.
-     * @return string Rendered feedback trigger.
-     */
-    private function feedback_trigger(string $icon, bool $group = false): string {
-        $this->triggercount++;
-        $class = 'btn btn-link p-0 qtype-clozeonimage-choice-feedback-trigger';
-        if ($group) {
-            $class .= ' qtype-clozeonimage-choice-feedback-trigger-group';
-        }
-        $label = get_string('feedbackforsubquestion', 'qtype_clozeonimage', $this->subquestionindex);
-        return html_writer::tag('button', $icon . html_writer::span($label, 'visually-hidden'), [
-            'type' => 'button',
-            'class' => $class,
-            'data-region' => 'clozeonimage-feedback-trigger',
-            'aria-controls' => implode(' ', $this->feedbackids),
-            'aria-expanded' => 'false',
+        return html_writer::div($result, $regionclass, [
+            'role' => 'group',
+            'aria-labelledby' => $grouplabelid,
         ]);
     }
 

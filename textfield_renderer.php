@@ -26,8 +26,7 @@
  * Text-field renderer matching Cloze, except that the random width increase is removed.
  */
 class qtype_clozeonimage_textfield_renderer extends qtype_multianswer_subq_renderer_base {
-    /** @var string Appearance class transferred to the generated feedback popover. */
-    private string $feedbackpopoverclass = 'qtype-clozeonimage-appearance-translucent';
+    use qtype_clozeonimage_feedback_renderer_trait;
 
     #[\Override]
     public function subquestion(
@@ -37,9 +36,7 @@ class qtype_clozeonimage_textfield_renderer extends qtype_multianswer_subq_rende
         question_graded_automatically $subq
     ) {
         $this->displayoptions = $options;
-        $this->feedbackpopoverclass = qtype_clozeonimage::control_appearance_class(
-            $qa->get_question()->controlappearance
-        );
+        $this->initialise_feedback_appearance($qa);
 
         $fieldprefix = 'sub' . $index . '_';
         $fieldname = $fieldprefix . 'answer';
@@ -93,10 +90,10 @@ class qtype_clozeonimage_textfield_renderer extends qtype_multianswer_subq_rende
             $inputattributes['readonly'] = 'readonly';
         }
 
-        $feedbackimg = '';
-        if ($options->correctness) {
-            $inputattributes['class'] .= ' ' . $this->feedback_class($matchinganswer->fraction);
-            $feedbackimg = $this->feedback_image($matchinganswer->fraction);
+        $answered = !is_null($response) && $response !== '';
+        [$stateclass, $statustext] = $this->review_state($matchinganswer->fraction, $answered, $options);
+        if ($stateclass !== '' && $stateclass !== 'notanswered') {
+            $inputattributes['class'] .= ' ' . $stateclass;
         }
 
         if ($subq->qtype->name() === 'shortanswer') {
@@ -119,14 +116,22 @@ class qtype_clozeonimage_textfield_renderer extends qtype_multianswer_subq_rende
             s($correctanswer->answer),
             $options
         );
+        $inputattributes = $this->feedback_trigger_attributes($inputattributes, $feedbackpopup);
 
-        $output = html_writer::start_tag('span', ['class' => 'subquestion']);
-        $output .= html_writer::tag('label', $this->get_answer_label(), [
+        $regionclass = 'subquestion qtype-clozeonimage-feedback-region';
+        if ($stateclass !== '') {
+            $regionclass .= ' qtype-clozeonimage-state-' . $stateclass;
+        }
+        $answerlabel = $this->get_answer_label();
+        if ($statustext !== '') {
+            $answerlabel .= ' ' . $statustext;
+        }
+        $output = html_writer::start_tag('span', ['class' => $regionclass]);
+        $output .= html_writer::tag('label', $answerlabel, [
             'class' => 'subq accesshide',
             'for' => $inputattributes['id'],
         ]);
         $output .= html_writer::empty_tag('input', $inputattributes);
-        $output .= $this->get_feedback_image($feedbackimg, $feedbackpopup);
         $output .= html_writer::end_tag('span');
         if ($validationerror !== '') {
             $output .= html_writer::div(
@@ -138,28 +143,5 @@ class qtype_clozeonimage_textfield_renderer extends qtype_multianswer_subq_rende
             );
         }
         return $output;
-    }
-
-    #[\Override]
-    protected function get_feedback_image(string $icon, string $feedbackcontents): string {
-        if ($icon === '') {
-            return '';
-        }
-
-        $this->page->requires->js_call_amd('qtype_multianswer/feedback', 'initPopovers');
-        $this->page->requires->js_call_amd('qtype_clozeonimage/feedback', 'init');
-
-        return html_writer::link('#', $icon, [
-            'role' => 'button',
-            'tabindex' => 0,
-            'class' => 'feedbacktrigger btn btn-link p-0',
-            'data-bs-toggle' => 'popover',
-            'data-bs-container' => 'body',
-            'data-bs-content' => $feedbackcontents,
-            'data-bs-placement' => 'right',
-            'data-bs-trigger' => 'hover focus',
-            'data-bs-html' => 'true',
-            'data-bs-custom-class' => $this->feedbackpopoverclass,
-        ]);
     }
 }

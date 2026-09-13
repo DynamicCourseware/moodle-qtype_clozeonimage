@@ -23,11 +23,10 @@
  */
 
 /**
- * Adds the per-question appearance class to the standard Cloze feedback popover.
+ * Render dropdown Multichoice with a geometry-neutral review-feedback surface.
  */
 class qtype_clozeonimage_multichoice_inline_renderer extends qtype_multianswer_multichoice_inline_renderer {
-    /** @var string Appearance class transferred to the generated feedback popover. */
-    private string $feedbackpopoverclass = 'qtype-clozeonimage-appearance-translucent';
+    use qtype_clozeonimage_feedback_renderer_trait;
 
     #[\Override]
     public function subquestion(
@@ -36,33 +35,93 @@ class qtype_clozeonimage_multichoice_inline_renderer extends qtype_multianswer_m
         $index,
         question_graded_automatically $subq
     ) {
-        $this->feedbackpopoverclass = qtype_clozeonimage::control_appearance_class(
-            $qa->get_question()->controlappearance
-        );
+        $this->displayoptions = $options;
+        $this->initialise_feedback_appearance($qa);
 
-        return parent::subquestion($qa, $options, $index, $subq);
-    }
-
-    #[\Override]
-    protected function get_feedback_image(string $icon, string $feedbackcontents): string {
-        if ($icon === '') {
-            return '';
+        $fieldname = 'sub' . $index . '_answer';
+        $response = $qa->get_last_qt_var($fieldname);
+        $choices = [];
+        $matchinganswer = new question_answer(0, '', null, '', FORMAT_HTML);
+        foreach ($subq->get_order($qa) as $value => $ansid) {
+            $answer = $subq->answers[$ansid];
+            $choices[$value] = $subq->format_text(
+                $answer->answer,
+                $answer->answerformat,
+                $qa,
+                'question',
+                'answer',
+                $ansid
+            );
+            if ($subq->is_choice_selected($response, $value)) {
+                $matchinganswer = $answer;
+            }
         }
 
-        $this->page->requires->js_call_amd('qtype_multianswer/feedback', 'initPopovers');
-        $this->page->requires->js_call_amd('qtype_clozeonimage/feedback', 'init');
+        $inputname = $qa->get_qt_field_name($fieldname);
+        $inputattributes = [
+            'id' => $inputname,
+            'class' => 'form-select d-inline-block mb-1',
+        ];
+        if ($options->readonly) {
+            $inputattributes['disabled'] = 'disabled';
+        }
 
-        return html_writer::link('#', $icon, [
-            'role' => 'button',
-            'tabindex' => 0,
-            'class' => 'feedbacktrigger btn btn-link p-0',
-            'data-bs-toggle' => 'popover',
-            'data-bs-container' => 'body',
-            'data-bs-content' => $feedbackcontents,
-            'data-bs-placement' => 'right',
-            'data-bs-trigger' => 'hover focus',
-            'data-bs-html' => 'true',
-            'data-bs-custom-class' => $this->feedbackpopoverclass,
+        $answered = !is_null($response) && $response !== '' && (string) $response !== '-1';
+        [$stateclass, $statustext] = $this->review_state($matchinganswer->fraction, $answered, $options);
+        if ($stateclass !== '' && $stateclass !== 'notanswered') {
+            $inputattributes['class'] .= ' ' . $stateclass;
+        }
+
+        $order = $subq->get_order($qa);
+        $correctresponses = $subq->get_correct_response();
+        $rightanswer = $subq->answers[$order[reset($correctresponses)]];
+        $feedbackpopup = $this->feedback_popup(
+            $subq,
+            $matchinganswer->fraction,
+            $subq->format_text(
+                $matchinganswer->feedback,
+                $matchinganswer->feedbackformat,
+                $qa,
+                'question',
+                'answerfeedback',
+                $matchinganswer->id
+            ),
+            $subq->format_text(
+                $rightanswer->answer,
+                $rightanswer->answerformat,
+                $qa,
+                'question',
+                'answer',
+                $rightanswer->id
+            ),
+            $options
+        );
+
+        $surfacebutton = '';
+        if ($options->readonly) {
+            $surfacebutton = $this->feedback_surface_button($feedbackpopup, (int) $index, $statustext);
+        } else {
+            $inputattributes = $this->feedback_trigger_attributes($inputattributes, $feedbackpopup);
+        }
+
+        $regionclass = 'subquestion qtype-clozeonimage-feedback-region';
+        if ($stateclass !== '') {
+            $regionclass .= ' qtype-clozeonimage-state-' . $stateclass;
+        }
+        $answerlabel = $this->get_answer_label();
+        if ($statustext !== '') {
+            $answerlabel .= ' ' . $statustext;
+        }
+
+        $output = html_writer::start_tag('span', ['class' => $regionclass]);
+        $output .= html_writer::tag('label', $answerlabel, [
+            'class' => 'subq accesshide',
+            'for' => $inputname,
         ]);
+        $output .= html_writer::select($choices, $inputname, $response, ['' => '&nbsp;'], $inputattributes);
+        $output .= $surfacebutton;
+        $output .= html_writer::end_tag('span');
+
+        return $output;
     }
 }

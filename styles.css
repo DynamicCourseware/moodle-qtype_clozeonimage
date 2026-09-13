@@ -33,6 +33,15 @@
     --qtype-clozeonimage-checked-control-bg: rgba(var(--bs-primary-rgb), 0.5);
     --qtype-clozeonimage-specific-feedback-bg: rgba(255, 243, 191, 0.4);
     --qtype-clozeonimage-outcome-bg: rgba(253, 243, 228, 0.8);
+    --qtype-clozeonimage-correct-bg: rgba(170, 255, 170, 0.78);
+    --qtype-clozeonimage-incorrect-bg: rgba(255, 170, 170, 0.78);
+    --qtype-clozeonimage-partial-bg: rgba(255, 224, 154, 0.78);
+    --qtype-clozeonimage-correct-border: rgba(var(--bs-success-rgb), 0.62);
+    --qtype-clozeonimage-incorrect-border: rgba(var(--bs-danger-rgb), 0.62);
+    --qtype-clozeonimage-partial-border: rgba(179, 92, 0, 0.62);
+    --qtype-clozeonimage-correct-border-active: rgb(var(--bs-success-rgb));
+    --qtype-clozeonimage-incorrect-border-active: rgb(var(--bs-danger-rgb));
+    --qtype-clozeonimage-partial-border-active: #b35c00;
 }
 
 .qtype-clozeonimage-preview-composition.qtype-clozeonimage-appearance-opaque,
@@ -44,6 +53,15 @@
     --qtype-clozeonimage-checked-control-bg: rgb(var(--bs-primary-rgb));
     --qtype-clozeonimage-specific-feedback-bg: #fff3bf;
     --qtype-clozeonimage-outcome-bg: #fdf3e4;
+    --qtype-clozeonimage-correct-bg: #afa;
+    --qtype-clozeonimage-incorrect-bg: #faa;
+    --qtype-clozeonimage-partial-bg: #ffe09a;
+    --qtype-clozeonimage-correct-border: rgba(var(--bs-success-rgb), 0.62);
+    --qtype-clozeonimage-incorrect-border: rgba(var(--bs-danger-rgb), 0.62);
+    --qtype-clozeonimage-partial-border: rgba(179, 92, 0, 0.62);
+    --qtype-clozeonimage-correct-border-active: rgb(var(--bs-success-rgb));
+    --qtype-clozeonimage-incorrect-border-active: rgb(var(--bs-danger-rgb));
+    --qtype-clozeonimage-partial-border-active: #b35c00;
 }
 
 .qtype-clozeonimage-preview-subquestion {
@@ -322,116 +340,136 @@ form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-anchor-grid .qtype-clo
     margin-top: 1rem;
 }
 
-.que.clozeonimage .qtype-clozeonimage-subquestion .subquestion:has(> .feedbacktrigger) {
+.que.clozeonimage .qtype-clozeonimage-subquestion .qtype-clozeonimage-feedback-region {
     display: inline-block;
     position: relative;
 }
 
-.que.clozeonimage .qtype-clozeonimage-subquestion .feedbacktrigger,
-.que.clozeonimage .qtype-clozeonimage-subquestion .qtype-clozeonimage-choice-feedback-trigger,
-.que.clozeonimage .qtype-clozeonimage-subquestion .qtype-clozeonimage-choice-result-icon {
-    align-items: center;
-    background-color: transparent;
-    border-color: transparent;
+.que.clozeonimage .qtype-clozeonimage-subquestion
+.qtype-clozeonimage-feedback-region:not(.subquestion) {
     border-radius: var(--bs-border-radius);
-    box-sizing: content-box;
-    display: inline-flex;
-    height: calc(1.5rem + .75rem);
-    inset-inline-start: 100%;
-    justify-content: center;
-    opacity: 0;
-    pointer-events: none;
-    position: absolute;
-    text-decoration: none;
-    top: 0;
-    width: calc(1.5rem + .75rem);
-    z-index: 2;
 }
 
-.que.clozeonimage .qtype-clozeonimage-subquestion .qtype-clozeonimage-choice-control,
-.que.clozeonimage .qtype-clozeonimage-subquestion .qtype-clozeonimage-choice-feedback {
-    position: relative;
-}
-
-.que.clozeonimage .qtype-clozeonimage-subquestion .qtype-clozeonimage-choice-control {
-    display: inline-block;
-}
-
-.que.clozeonimage .qtype-clozeonimage-subquestion .feedbacktrigger:focus,
-.que.clozeonimage .qtype-clozeonimage-subquestion .feedbacktrigger:hover,
-.que.clozeonimage .qtype-clozeonimage-subquestion .subquestion:focus-within > .feedbacktrigger,
-.que.clozeonimage .qtype-clozeonimage-subquestion .subquestion:hover > .feedbacktrigger,
-.que.clozeonimage .qtype-clozeonimage-subquestion .qtype-clozeonimage-choice-feedback-trigger:focus,
-.que.clozeonimage .qtype-clozeonimage-subquestion .qtype-clozeonimage-choice-feedback-trigger:hover,
 .que.clozeonimage .qtype-clozeonimage-subquestion
-.qtype-clozeonimage-choice-control:focus-within > .qtype-clozeonimage-choice-feedback-trigger,
-.que.clozeonimage .qtype-clozeonimage-subquestion
-.qtype-clozeonimage-choice-control:hover > .qtype-clozeonimage-choice-feedback-trigger,
-.que.clozeonimage .qtype-clozeonimage-subquestion
-.qtype-clozeonimage-choice-control:focus-within > .qtype-clozeonimage-choice-result-icon,
-.que.clozeonimage .qtype-clozeonimage-subquestion
-.qtype-clozeonimage-choice-control:hover > .qtype-clozeonimage-choice-result-icon,
-.que.clozeonimage .qtype-clozeonimage-subquestion
-.qtype-clozeonimage-choice-control:focus-within > .qtype-clozeonimage-choice-feedback-trigger-group,
-.que.clozeonimage .qtype-clozeonimage-subquestion
-.qtype-clozeonimage-choice-control:hover > .qtype-clozeonimage-choice-feedback-trigger-group {
-    opacity: 1;
-    pointer-events: auto;
+.qtype-clozeonimage-feedback-region.qtype-clozeonimage-state-correct {
+    --qtype-clozeonimage-state-outline: var(--qtype-clozeonimage-correct-border);
 }
 
-.que.clozeonimage .qtype-clozeonimage-subquestion .feedbacktrigger .icon,
-.que.clozeonimage .qtype-clozeonimage-subquestion .qtype-clozeonimage-choice-feedback-trigger .icon,
-.que.clozeonimage .qtype-clozeonimage-subquestion .qtype-clozeonimage-choice-result-icon .icon {
-    margin-right: 0;
-    opacity: 1;
+.que.clozeonimage .qtype-clozeonimage-subquestion
+.qtype-clozeonimage-feedback-region.qtype-clozeonimage-state-incorrect {
+    --qtype-clozeonimage-state-outline: var(--qtype-clozeonimage-incorrect-border);
 }
 
-.que.clozeonimage .qtype-clozeonimage-choice-feedback .specificfeedback,
-.que.clozeonimage .qtype-clozeonimage-choice-feedback .outcome {
-    display: none;
+.que.clozeonimage .qtype-clozeonimage-subquestion
+.qtype-clozeonimage-feedback-region.qtype-clozeonimage-state-partiallycorrect {
+    --qtype-clozeonimage-state-outline: var(--qtype-clozeonimage-partial-border);
 }
 
-.que.clozeonimage .qtype-clozeonimage-choice-feedback.qtype-clozeonimage-feedback-open .specificfeedback,
-.que.clozeonimage .qtype-clozeonimage-choice-feedback.qtype-clozeonimage-feedback-open .outcome,
-.que.clozeonimage .qtype-clozeonimage-choice-feedback:has(
-    .qtype-clozeonimage-choice-feedback-trigger:hover
-) .specificfeedback,
-.que.clozeonimage .qtype-clozeonimage-choice-feedback:has(
-    .qtype-clozeonimage-choice-feedback-trigger:hover
-) .outcome,
-.que.clozeonimage .qtype-clozeonimage-choice-feedback:has(
-    .qtype-clozeonimage-choice-feedback-trigger:focus
-) .specificfeedback,
-.que.clozeonimage .qtype-clozeonimage-choice-feedback:has(
-    .qtype-clozeonimage-choice-feedback-trigger:focus
-) .outcome {
-    display: block;
-}
-
-.que.clozeonimage .qtype-clozeonimage-choice-feedback.qtype-clozeonimage-feedback-dismissed .specificfeedback,
-.que.clozeonimage .qtype-clozeonimage-choice-feedback.qtype-clozeonimage-feedback-dismissed .outcome {
-    display: none;
-}
-
-.que.clozeonimage .qtype-clozeonimage-subquestion:has(
-.qtype-clozeonimage-choice-feedback-trigger:hover
-),
-.que.clozeonimage .qtype-clozeonimage-subquestion:has(
-.qtype-clozeonimage-choice-feedback-trigger:focus
-),
-.que.clozeonimage .qtype-clozeonimage-subquestion:has(
-.qtype-clozeonimage-choice-feedback.qtype-clozeonimage-feedback-open
+.que.clozeonimage .qtype-clozeonimage-subquestion
+.qtype-clozeonimage-feedback-region.qtype-clozeonimage-state-correct:is(
+    :hover, :focus-within, .qtype-clozeonimage-feedback-active
 ) {
+    --qtype-clozeonimage-state-outline: var(--qtype-clozeonimage-correct-border-active);
+}
+
+.que.clozeonimage .qtype-clozeonimage-subquestion
+.qtype-clozeonimage-feedback-region.qtype-clozeonimage-state-incorrect:is(
+    :hover, :focus-within, .qtype-clozeonimage-feedback-active
+) {
+    --qtype-clozeonimage-state-outline: var(--qtype-clozeonimage-incorrect-border-active);
+}
+
+.que.clozeonimage .qtype-clozeonimage-subquestion
+.qtype-clozeonimage-feedback-region.qtype-clozeonimage-state-partiallycorrect:is(
+    :hover, :focus-within, .qtype-clozeonimage-feedback-active
+) {
+    --qtype-clozeonimage-state-outline: var(--qtype-clozeonimage-partial-border-active);
+}
+
+.que.clozeonimage .qtype-clozeonimage-subquestion
+.qtype-clozeonimage-feedback-region:not(.subquestion).qtype-clozeonimage-state-correct,
+.que.clozeonimage .qtype-clozeonimage-subquestion
+.qtype-clozeonimage-feedback-region.subquestion.qtype-clozeonimage-state-correct > .form-control,
+.que.clozeonimage .qtype-clozeonimage-subquestion
+.qtype-clozeonimage-feedback-region.subquestion.qtype-clozeonimage-state-correct > .form-select {
+    outline: 4px solid var(--qtype-clozeonimage-state-outline);
+    outline-offset: 1px;
+}
+
+.que.clozeonimage .qtype-clozeonimage-subquestion
+.qtype-clozeonimage-feedback-region:not(.subquestion).qtype-clozeonimage-state-incorrect,
+.que.clozeonimage .qtype-clozeonimage-subquestion
+.qtype-clozeonimage-feedback-region.subquestion.qtype-clozeonimage-state-incorrect > .form-control,
+.que.clozeonimage .qtype-clozeonimage-subquestion
+.qtype-clozeonimage-feedback-region.subquestion.qtype-clozeonimage-state-incorrect > .form-select {
+    outline: 4px dashed var(--qtype-clozeonimage-state-outline);
+    outline-offset: 1px;
+}
+
+.que.clozeonimage .qtype-clozeonimage-subquestion
+.qtype-clozeonimage-feedback-region:not(.subquestion).qtype-clozeonimage-state-partiallycorrect,
+.que.clozeonimage .qtype-clozeonimage-subquestion
+.qtype-clozeonimage-feedback-region.subquestion.qtype-clozeonimage-state-partiallycorrect > .form-control,
+.que.clozeonimage .qtype-clozeonimage-subquestion
+.qtype-clozeonimage-feedback-region.subquestion.qtype-clozeonimage-state-partiallycorrect > .form-select {
+    outline: 5px dotted var(--qtype-clozeonimage-state-outline);
+    outline-offset: 1px;
+}
+
+.que.clozeonimage .qtype-clozeonimage-subquestion
+.qtype-clozeonimage-feedback-region > .form-control.correct,
+.que.clozeonimage .qtype-clozeonimage-subquestion
+.qtype-clozeonimage-feedback-region > .form-select.correct,
+.que.clozeonimage .qtype-clozeonimage-subquestion .qtype-clozeonimage-choice.correct {
+    background-color: var(--qtype-clozeonimage-correct-bg);
+}
+
+.que.clozeonimage .qtype-clozeonimage-subquestion
+.qtype-clozeonimage-feedback-region > .form-control.incorrect,
+.que.clozeonimage .qtype-clozeonimage-subquestion
+.qtype-clozeonimage-feedback-region > .form-select.incorrect,
+.que.clozeonimage .qtype-clozeonimage-subquestion .qtype-clozeonimage-choice.incorrect {
+    background-color: var(--qtype-clozeonimage-incorrect-bg);
+}
+
+.que.clozeonimage .qtype-clozeonimage-subquestion
+.qtype-clozeonimage-feedback-region > .form-control.partiallycorrect,
+.que.clozeonimage .qtype-clozeonimage-subquestion
+.qtype-clozeonimage-feedback-region > .form-select.partiallycorrect,
+.que.clozeonimage .qtype-clozeonimage-subquestion .qtype-clozeonimage-choice.partiallycorrect {
+    background-color: var(--qtype-clozeonimage-partial-bg);
+}
+
+.que.clozeonimage .qtype-clozeonimage-subquestion .qtype-clozeonimage-review-surface {
+    appearance: none;
+    background-color: transparent;
+    border: 0;
+    cursor: pointer;
+    inset: 0;
+    margin: 0;
+    padding: 0;
+    position: absolute;
     z-index: 1;
 }
 
-@media (hover: none) {
-    .que.clozeonimage .qtype-clozeonimage-subquestion .feedbacktrigger,
-    .que.clozeonimage .qtype-clozeonimage-subquestion .qtype-clozeonimage-choice-feedback-trigger,
-    .que.clozeonimage .qtype-clozeonimage-subquestion .qtype-clozeonimage-choice-result-icon {
-        opacity: 1;
-        pointer-events: auto;
-    }
+.que.clozeonimage .qtype-clozeonimage-subquestion
+.qtype-clozeonimage-feedback-region:not(.qtype-clozeonimage-state-correct):not(
+    .qtype-clozeonimage-state-incorrect
+):not(.qtype-clozeonimage-state-partiallycorrect) .qtype-clozeonimage-review-surface:focus-visible {
+    border-radius: var(--bs-border-radius);
+    outline: 3px solid var(--bs-focus-ring-color);
+    outline-offset: 5px;
+}
+
+.que.clozeonimage .qtype-clozeonimage-subquestion
+.qtype-clozeonimage-feedback-region:not(.qtype-clozeonimage-state-correct):not(
+    .qtype-clozeonimage-state-incorrect
+):not(.qtype-clozeonimage-state-partiallycorrect)
+.qtype-clozeonimage-feedback-trigger:not(.qtype-clozeonimage-review-surface):focus-visible {
+    outline: 3px solid var(--bs-focus-ring-color);
+    outline-offset: 5px;
+    position: relative;
+    z-index: 2;
 }
 
 .popover.qtype-clozeonimage-appearance-translucent {
@@ -440,4 +478,28 @@ form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-anchor-grid .qtype-clo
 
 .popover.qtype-clozeonimage-appearance-opaque {
     --bs-popover-bg: var(--bs-body-bg);
+}
+
+.popover .qtype-clozeonimage-feedback-content,
+.popover .qtype-clozeonimage-feedback-section {
+    display: block;
+}
+
+.popover .qtype-clozeonimage-feedback-section + .qtype-clozeonimage-feedback-section,
+.popover .qtype-clozeonimage-feedback-choice-item + .qtype-clozeonimage-feedback-choice-item {
+    margin-top: .3rem;
+}
+
+.popover .qtype-clozeonimage-feedback-section > :first-child,
+.popover .qtype-clozeonimage-feedback-choice-text > :first-child {
+    margin-top: 0;
+}
+
+.popover .qtype-clozeonimage-feedback-section > :last-child,
+.popover .qtype-clozeonimage-feedback-choice-text > :last-child {
+    margin-bottom: 0;
+}
+
+.popover .qtype-clozeonimage-feedback-state {
+    font-weight: 600;
 }

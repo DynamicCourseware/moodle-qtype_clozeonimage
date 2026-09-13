@@ -26,6 +26,7 @@ defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
 require_once($CFG->dirroot . '/question/type/multianswer/renderer.php');
+require_once($CFG->dirroot . '/question/type/clozeonimage/feedback_renderer_trait.php');
 require_once($CFG->dirroot . '/question/type/clozeonimage/textfield_renderer.php');
 require_once($CFG->dirroot . '/question/type/clozeonimage/multichoice_inline_renderer.php');
 require_once($CFG->dirroot . '/question/type/clozeonimage/multichoice_renderer.php');
