@@ -129,6 +129,29 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
     }
 
     /**
+     * Return the display options after the current behaviour has adjusted them.
+     *
+     * @return \question_display_options Adjusted display options.
+     */
+    private function adjusted_display_options(): \question_display_options {
+        $options = clone $this->displayoptions;
+        $this->get_question_attempt()->get_behaviour()->adjust_display_options($options);
+        return $options;
+    }
+
+    /**
+     * Assert that rendered output contains no feedback-popover trigger markup.
+     *
+     * @param \DOMXPath $xpath XPath for the rendered output.
+     */
+    private function assert_no_feedback_trigger_markup(\DOMXPath $xpath): void {
+        $this->assertCount(0, $xpath->query('//*[@data-bs-toggle="popover"]'));
+        $this->assertCount(0, $xpath->query('//*[@data-bs-content]'));
+        $this->assertCount(0, $xpath->query('//*[contains(concat(" ", normalize-space(@class), " "), ' .
+            '" feedbacktrigger ")]'));
+    }
+
+    /**
      * Assert that popup contents use the uniform section structure.
      *
      * @param string $feedback Popup HTML.
@@ -809,6 +832,196 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
     }
 
     /**
+     * Editable controls whose retained responses must not create mark-only feedback popovers.
+     *
+     * @return array<string, array{string,array<string,string>,string}>
+     */
+    public static function editable_answer_entry_feedback_provider(): array {
+        return [
+            'Short Answer' => ['shortanswer', ['sub1_answer' => 'frog'], '//input[@type="text"]'],
+            'Numerical' => ['numerical', ['sub1_answer' => '3.14'], '//input[@type="text"]'],
+            'dropdown Multichoice' => ['multichoice', ['sub1_answer' => '1'], '//select'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('editable_answer_entry_feedback_provider')]
+    public function test_editable_answer_entry_suppresses_mark_only_feedback_popover(
+        string $subquestiontype,
+        array $response,
+        string $controlxpath
+    ): void {
+        $this->start_attempt_at_question(
+            $this->make_question(\qtype_clozeonimage::CONTROL_APPEARANCE_TRANSLUCENT, $subquestiontype),
+            'interactive',
+            1
+        );
+        $this->process_submission($response);
+
+        $options = $this->adjusted_display_options();
+        $this->assertFalse($options->readonly);
+        $this->assertFalse((bool) $options->correctness);
+        $this->assertFalse((bool) $options->feedback);
+        $this->assertFalse((bool) $options->rightanswer);
+        $this->assertSame(\question_display_options::MARK_AND_MAX, $options->marks);
+
+        $this->render();
+        $xpath = $this->xpath($this->currentoutput);
+        $controls = $xpath->query($controlxpath);
+        $this->assertCount(1, $controls);
+        $this->assertFalse($controls->item(0)->hasAttribute('readonly'));
+        $this->assertFalse($controls->item(0)->hasAttribute('disabled'));
+        $this->assert_no_feedback_trigger_markup($xpath);
+    }
+
+    /**
+     * Choice renderers and responses used to exercise the complete Interactive lifecycle.
+     *
+     * @return array<string, array{string,array<string,int>,array<string,int>,string,int}>
+     */
+    public static function interactive_choice_feedback_lifecycle_provider(): array {
+        return [
+            'vertical Multichoice' => [
+                'multichoice_vertical',
+                ['sub1_answer' => 1],
+                ['sub1_answer' => 0],
+                '//input[@data-role="clozeonimage-multichoice-choice"]',
+                3,
+            ],
+            'horizontal Multiple Response' => [
+                'multiresponse_horizontal',
+                ['sub1_choice0' => 1, 'sub1_choice1' => 1],
+                ['sub1_choice0' => 1, 'sub1_choice1' => 0, 'sub1_choice2' => 1, 'sub1_choice3' => 0],
+                '//input[@type="checkbox"]',
+                4,
+            ],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('interactive_choice_feedback_lifecycle_provider')]
+    public function test_interactive_choice_feedback_lifecycle(
+        string $subquestiontype,
+        array $wrongresponse,
+        array $correctresponse,
+        string $controlxpath,
+        int $controlcount
+    ): void {
+        $question = $this->make_question(
+            \qtype_clozeonimage::CONTROL_APPEARANCE_TRANSLUCENT,
+            $subquestiontype
+        );
+        $question->subquestions[1]->shuffleanswers = false;
+        $question->hints = [new \question_hint_with_parts(1, 'Hint', FORMAT_HTML, false, false)];
+        $this->start_attempt_at_question($question, 'interactive', 1);
+
+        $this->render();
+        $this->assert_no_feedback_trigger_markup($this->xpath($this->currentoutput));
+
+        $this->process_submission($wrongresponse + ['-submit' => 1]);
+        $options = $this->adjusted_display_options();
+        $this->assertSame(\qbehaviour_interactive::TRY_AGAIN_VISIBLE, $options->readonly);
+        $this->assertTrue((bool) $options->feedback);
+
+        $this->render();
+        $xpath = $this->xpath($this->currentoutput);
+        $controls = $xpath->query($controlxpath);
+        $this->assertCount($controlcount, $controls);
+        foreach ($controls as $control) {
+            $this->assertTrue($control->hasAttribute('disabled'));
+        }
+        $this->assertCount(1, $xpath->query('//button[contains(concat(" ", normalize-space(@class), " "), ' .
+            '" qtype-clozeonimage-review-surface ") and @data-bs-toggle="popover"]'));
+
+        $this->process_submission(['-tryagain' => 1]);
+        $options = $this->adjusted_display_options();
+        $this->assertFalse($options->readonly);
+        $this->assertFalse((bool) $options->correctness);
+        $this->assertFalse((bool) $options->feedback);
+        $this->assertFalse((bool) $options->rightanswer);
+        $this->assertSame(\question_display_options::MARK_AND_MAX, $options->marks);
+
+        $this->render();
+        $xpath = $this->xpath($this->currentoutput);
+        $controls = $xpath->query($controlxpath);
+        $this->assertCount($controlcount, $controls);
+        foreach ($controls as $control) {
+            $this->assertFalse($control->hasAttribute('disabled'));
+        }
+        $this->assert_no_feedback_trigger_markup($xpath);
+        $this->assertCount(0, $xpath->query('//button[contains(concat(" ", normalize-space(@class), " "), ' .
+            '" qtype-clozeonimage-review-surface ")]'));
+
+        $this->process_submission($correctresponse + ['-submit' => 1]);
+        $options = $this->adjusted_display_options();
+        $this->assertTrue($options->readonly);
+
+        $this->render();
+        $xpath = $this->xpath($this->currentoutput);
+        $this->assertCount(1, $xpath->query('//button[contains(concat(" ", normalize-space(@class), " "), ' .
+            '" qtype-clozeonimage-review-surface ") and @data-bs-toggle="popover"]'));
+    }
+
+    public function test_interactive_clearwrong_retained_correct_choice_has_no_stale_feedback(): void {
+        $question = $this->make_question(
+            \qtype_clozeonimage::CONTROL_APPEARANCE_TRANSLUCENT,
+            'multichoice_vertical'
+        );
+        $question->subquestions[1]->shuffleanswers = false;
+        $this->add_second_multichoice_subquestion($question);
+        $question->subquestions[2]->shuffleanswers = false;
+        $question->hints = [new \question_hint_with_parts(1, 'Hint', FORMAT_HTML, false, true)];
+        $this->start_attempt_at_question($question, 'interactive', 1);
+
+        $this->process_submission([
+            'sub1_answer' => 0,
+            'sub2_answer' => 1,
+            '-submit' => 1,
+        ]);
+        $this->assertSame(
+            \qbehaviour_interactive::TRY_AGAIN_VISIBLE,
+            $this->adjusted_display_options()->readonly
+        );
+
+        $this->process_submission([
+            'sub1_answer' => 0,
+            'sub2_answer' => -1,
+            '-tryagain' => 1,
+        ]);
+        $this->assertFalse($this->adjusted_display_options()->readonly);
+
+        $this->render();
+        $xpath = $this->xpath($this->currentoutput);
+        $this->assert_no_feedback_trigger_markup($xpath);
+        $this->assertCount(6, $xpath->query(
+            '//input[@data-role="clozeonimage-multichoice-choice" and not(@disabled)]'
+        ));
+        $buttons = $xpath->query('//button[@data-action="clozeonimage-clear-choice"]');
+        $this->assertCount(2, $buttons);
+        $this->assertFalse($buttons->item(0)->hasAttribute('hidden'));
+        $this->assertTrue($buttons->item(1)->hasAttribute('hidden'));
+    }
+
+    public function test_marks_only_readonly_review_retains_feedback_popover(): void {
+        $this->start_attempt_at_question($this->make_question(), 'deferredfeedback', 1);
+        $this->process_submission(['sub1_answer' => 'frog']);
+        $this->finish();
+        $this->displayoptions->correctness = false;
+        $this->displayoptions->feedback = false;
+        $this->displayoptions->rightanswer = false;
+        $this->displayoptions->marks = \question_display_options::MARK_AND_MAX;
+
+        $this->render();
+        $xpath = $this->xpath($this->currentoutput);
+        $triggers = $xpath->query('//input[@type="text" and @readonly and @data-bs-toggle="popover"]');
+        $this->assertCount(1, $triggers);
+        $feedback = $triggers->item(0)->getAttribute('data-bs-content');
+        $this->assertStringContainsString(get_string('markoutofmax', 'question', (object) [
+            'mark' => '1.00',
+            'max' => '1.00',
+        ]), $feedback);
+        $this->assertStringNotContainsString(\question_state::$gradedright->default_string(true), $feedback);
+    }
+
+    /**
      * Choice families with an unanswered review state.
      *
      * @return array<string, array{string}>
@@ -892,10 +1105,10 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
                 \qtype_clozeonimage::CONTROL_APPEARANCE_TRANSLUCENT,
                 'multiresponse_horizontal'
             ),
-            'deferredfeedback',
+            'adaptive',
             1
         );
-        $this->process_submission(['sub1_choice0' => 1]);
+        $this->process_submission(['sub1_choice0' => 1, '-submit' => 1]);
         $this->displayoptions->correctness = true;
         $this->displayoptions->feedback = true;
         $this->render();
@@ -918,10 +1131,10 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
                 \qtype_clozeonimage::CONTROL_APPEARANCE_TRANSLUCENT,
                 'multichoice'
             ),
-            'deferredfeedback',
+            'adaptive',
             1
         );
-        $this->process_submission(['sub1_answer' => 0]);
+        $this->process_submission(['sub1_answer' => 0, '-submit' => 1]);
         $this->displayoptions->correctness = true;
         $this->displayoptions->feedback = true;
         $this->render();

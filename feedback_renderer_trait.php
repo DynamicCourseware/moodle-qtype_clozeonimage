@@ -105,8 +105,9 @@ trait qtype_clozeonimage_feedback_renderer_trait {
             );
         }
 
+        $showresult = $options->readonly || $options->correctness || $options->feedback || $options->rightanswer;
         if (
-            $options->marks >= question_display_options::MARK_AND_MAX && $subq->defaultmark > 0 &&
+            $showresult && $options->marks >= question_display_options::MARK_AND_MAX && $subq->defaultmark > 0 &&
                 (!is_null($fraction) || $feedback)
         ) {
             $mark = (object) [
