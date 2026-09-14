@@ -96,6 +96,7 @@ class qtype_clozeonimage_multichoice_renderer extends qtype_multianswer_subq_ren
             'type' => 'radio',
             'name' => $inputname,
             'class' => 'form-check-input',
+            'data-role' => 'clozeonimage-multichoice-choice',
         ];
         if ($options->readonly) {
             $inputattributes['disabled'] = 'disabled';
@@ -151,16 +152,54 @@ class qtype_clozeonimage_multichoice_renderer extends qtype_multianswer_subq_ren
             $result .= html_writer::span($control, 'qtype-clozeonimage-choice-control');
             $result .= html_writer::end_tag('div');
         }
+        if (!$options->readonly) {
+            $clearid = $inputname . '-clear';
+            $clearlabel = get_string('clearchoiceforsubquestion', 'qtype_clozeonimage', $index);
+            $clearattributes = [
+                'type' => 'radio',
+                'name' => $inputname,
+                'id' => $clearid,
+                'value' => -1,
+                'class' => 'visually-hidden qtype-clozeonimage-clear-choice-sentinel',
+                'data-role' => 'clozeonimage-clear-choice-sentinel',
+                'aria-hidden' => 'true',
+            ];
+            if ($answered) {
+                $clearattributes['disabled'] = 'disabled';
+            } else {
+                $clearattributes['checked'] = 'checked';
+            }
+            $result .= html_writer::empty_tag('input', $clearattributes);
+        }
         $result .= $this->choices_wrapper_end();
         if ($options->readonly) {
             $result .= $this->feedback_surface_button($feedbackpopup, (int) $index, $statustext);
+        } else {
+            $buttonattributes = [
+                'type' => 'button',
+                'class' => 'qtype-clozeonimage-clear-choice',
+                'data-action' => 'clozeonimage-clear-choice',
+                'title' => $clearlabel,
+            ];
+            if (!$answered) {
+                $buttonattributes['hidden'] = 'hidden';
+            }
+            $result .= html_writer::tag(
+                'button',
+                html_writer::span('C', '', ['aria-hidden' => 'true']) .
+                    html_writer::span($clearlabel, 'visually-hidden'),
+                $buttonattributes
+            );
+            $this->page->requires->js_call_amd('qtype_clozeonimage/clearchoice', 'init');
         }
 
         $regionclass = 'qtype-clozeonimage-feedback-region';
         if ($stateclass !== '') {
             $regionclass .= ' qtype-clozeonimage-state-' . $stateclass;
         }
-        return html_writer::div($result, $regionclass);
+        return html_writer::div($result, $regionclass, [
+            'data-region' => 'clozeonimage-multichoice',
+        ]);
     }
 
     /**

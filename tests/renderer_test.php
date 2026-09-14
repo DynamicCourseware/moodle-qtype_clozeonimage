@@ -104,6 +104,19 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
     }
 
     /**
+     * Add a second single-answer Multichoice subquestion to a test question.
+     *
+     * @param \qtype_clozeonimage_question $question Question to extend.
+     * @return void
+     */
+    private function add_second_multichoice_subquestion(\qtype_clozeonimage_question $question): void {
+        $subquestion = \test_question_maker::make_a_multichoice_single_question();
+        $subquestion->layout = (string) \qtype_multichoice_base::LAYOUT_HORIZONTAL;
+        $question->subquestions[2] = $subquestion;
+        $question->positions[2] = (object) ['xleft' => 120, 'ytop' => 120, 'anchor' => 4];
+    }
+
+    /**
      * Parse rendered output and return an XPath helper.
      *
      * @param string $html Rendered question HTML.
@@ -321,8 +334,16 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
             'Short Answer' => ['shortanswer', '//input[@type="text"]', 1],
             'Numerical' => ['numerical', '//input[@type="text"]', 1],
             'dropdown Multichoice' => ['multichoice', '//select', 1],
-            'vertical Multichoice' => ['multichoice_vertical', '//input[@type="radio"]', 3],
-            'horizontal Multichoice' => ['multichoice_horizontal', '//input[@type="radio"]', 3],
+            'vertical Multichoice' => [
+                'multichoice_vertical',
+                '//input[@type="radio" and @data-role="clozeonimage-multichoice-choice"]',
+                3,
+            ],
+            'horizontal Multichoice' => [
+                'multichoice_horizontal',
+                '//input[@type="radio" and @data-role="clozeonimage-multichoice-choice"]',
+                3,
+            ],
             'vertical Multiple Response' => ['multiresponse_vertical', '//input[@type="checkbox"]', 4],
             'horizontal Multiple Response' => ['multiresponse_horizontal', '//input[@type="checkbox"]', 4],
         ];
@@ -354,6 +375,173 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
             '" qtype-clozeonimage-review-surface ")]'));
         $this->assertCount(0, $xpath->query('//*[@data-bs-toggle="popover"]'));
         $this->assertCount(0, $xpath->query('//img[contains(@src, "grade_")]'));
+    }
+
+    /**
+     * Editable non-dropdown Multichoice layouts that support local clearing.
+     *
+     * @return array<string, array{string}>
+     */
+    public static function clear_choice_layout_provider(): array {
+        return [
+            'vertical persisted layout' => ['multichoice_vertical'],
+            'horizontal persisted layout' => ['multichoice_horizontal'],
+            'vertical in-memory integer layout' => ['multichoice_vertical_integer'],
+            'horizontal shuffled layout' => ['multichoice_horizontal_shuffled'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('clear_choice_layout_provider')]
+    public function test_editable_multichoice_unanswered_has_local_clear_sentinel(
+        string $subquestiontype
+    ): void {
+        $this->start_attempt_at_question(
+            $this->make_question(\qtype_clozeonimage::CONTROL_APPEARANCE_TRANSLUCENT, $subquestiontype),
+            'deferredfeedback',
+            1
+        );
+
+        $this->render();
+        $xpath = $this->xpath($this->currentoutput);
+        $regions = $xpath->query('//*[@data-region="clozeonimage-multichoice"]');
+        $this->assertCount(1, $regions);
+        $region = $regions->item(0);
+        $choices = $xpath->query('.//input[@data-role="clozeonimage-multichoice-choice"]', $region);
+        $sentinels = $xpath->query('.//input[@data-role="clozeonimage-clear-choice-sentinel"]', $region);
+        $buttons = $xpath->query('.//button[@data-action="clozeonimage-clear-choice"]', $region);
+
+        $this->assertCount(3, $choices);
+        $this->assertCount(1, $sentinels);
+        $this->assertCount(1, $buttons);
+        $sentinel = $sentinels->item(0);
+        $button = $buttons->item(0);
+        $this->assertSame($choices->item(0)->getAttribute('name'), $sentinel->getAttribute('name'));
+        $this->assertSame('-1', $sentinel->getAttribute('value'));
+        $this->assertTrue($sentinel->hasAttribute('checked'));
+        $this->assertFalse($sentinel->hasAttribute('disabled'));
+        $this->assertSame('button', $button->getAttribute('type'));
+        $this->assertTrue($button->hasAttribute('hidden'));
+        $this->assertSame(
+            get_string('clearchoiceforsubquestion', 'qtype_clozeonimage', 1),
+            $button->getAttribute('title')
+        );
+        $this->assertStringContainsString(
+            get_string('clearchoiceforsubquestion', 'qtype_clozeonimage', 1),
+            $button->textContent
+        );
+        $this->assertCount(1, $xpath->query('.//span[@aria-hidden="true" and text()="C"]', $button));
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('clear_choice_layout_provider')]
+    public function test_selected_editable_multichoice_has_available_local_clear_button(
+        string $subquestiontype
+    ): void {
+        $this->start_attempt_at_question(
+            $this->make_question(\qtype_clozeonimage::CONTROL_APPEARANCE_TRANSLUCENT, $subquestiontype),
+            'deferredfeedback',
+            1
+        );
+        $this->process_submission(['sub1_answer' => '1']);
+
+        $this->render();
+        $xpath = $this->xpath($this->currentoutput);
+        $sentinel = $xpath->query('//input[@data-role="clozeonimage-clear-choice-sentinel"]')->item(0);
+        $button = $xpath->query('//button[@data-action="clozeonimage-clear-choice"]')->item(0);
+
+        $this->assertNotNull($sentinel);
+        $this->assertNotNull($button);
+        $this->assertFalse($sentinel->hasAttribute('checked'));
+        $this->assertTrue($sentinel->hasAttribute('disabled'));
+        $this->assertFalse($button->hasAttribute('hidden'));
+    }
+
+    public function test_clear_choice_controls_are_local_to_each_multichoice_subquestion(): void {
+        $question = $this->make_question(
+            \qtype_clozeonimage::CONTROL_APPEARANCE_TRANSLUCENT,
+            'multichoice_vertical'
+        );
+        $this->add_second_multichoice_subquestion($question);
+        $this->start_attempt_at_question($question, 'deferredfeedback', 1);
+        $this->process_submission([
+            'sub1_answer' => '1',
+            'sub2_answer' => '0',
+        ]);
+
+        $this->render();
+        $xpath = $this->xpath($this->currentoutput);
+        $regions = $xpath->query('//*[@data-region="clozeonimage-multichoice"]');
+        $this->assertCount(2, $regions);
+        $names = [];
+        $ids = [];
+        foreach ($regions as $region) {
+            $sentinels = $xpath->query('.//input[@data-role="clozeonimage-clear-choice-sentinel"]', $region);
+            $buttons = $xpath->query('.//button[@data-action="clozeonimage-clear-choice"]', $region);
+            $this->assertCount(1, $sentinels);
+            $this->assertCount(1, $buttons);
+            $names[] = $sentinels->item(0)->getAttribute('name');
+            $ids[] = $sentinels->item(0)->getAttribute('id');
+            $this->assertFalse($buttons->item(0)->hasAttribute('hidden'));
+        }
+        $this->assertCount(2, array_unique($names));
+        $this->assertCount(2, array_unique($ids));
+
+        $this->process_submission([
+            'sub1_answer' => '-1',
+            'sub2_answer' => '0',
+        ]);
+        $this->assertSame('-1', $this->get_question_attempt()->get_last_qt_var('sub1_answer'));
+        $this->assertSame('0', $this->get_question_attempt()->get_last_qt_var('sub2_answer'));
+        $this->assertFalse($question->is_complete_response($this->get_question_attempt()->get_last_qt_data()));
+    }
+
+    /**
+     * Subquestion types that must not receive local single-choice clearing controls.
+     *
+     * @return array<string, array{string}>
+     */
+    public static function no_clear_choice_control_provider(): array {
+        return [
+            'Short Answer' => ['shortanswer'],
+            'Numerical' => ['numerical'],
+            'dropdown Multichoice' => ['multichoice'],
+            'vertical Multiple Response' => ['multiresponse_vertical'],
+            'horizontal Multiple Response' => ['multiresponse_horizontal'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('no_clear_choice_control_provider')]
+    public function test_other_subquestion_types_have_no_local_clear_choice_control(
+        string $subquestiontype
+    ): void {
+        $this->start_attempt_at_question(
+            $this->make_question(\qtype_clozeonimage::CONTROL_APPEARANCE_TRANSLUCENT, $subquestiontype),
+            'deferredfeedback',
+            1
+        );
+
+        $this->render();
+        $xpath = $this->xpath($this->currentoutput);
+        $this->assertCount(0, $xpath->query('//*[@data-role="clozeonimage-clear-choice-sentinel"]'));
+        $this->assertCount(0, $xpath->query('//*[@data-action="clozeonimage-clear-choice"]'));
+    }
+
+    public function test_readonly_multichoice_has_no_actionable_local_clear_choice_control(): void {
+        $this->start_attempt_at_question(
+            $this->make_question(
+                \qtype_clozeonimage::CONTROL_APPEARANCE_TRANSLUCENT,
+                'multichoice_vertical'
+            ),
+            'deferredfeedback',
+            1
+        );
+        $this->process_submission(['sub1_answer' => '1']);
+        $this->displayoptions->readonly = 0x10; // Interactive's special truthy Try again state.
+
+        $this->render();
+        $xpath = $this->xpath($this->currentoutput);
+        $this->assertCount(0, $xpath->query('//*[@data-role="clozeonimage-clear-choice-sentinel"]'));
+        $this->assertCount(0, $xpath->query('//*[@data-action="clozeonimage-clear-choice"]'));
+        $this->assertCount(3, $xpath->query('//input[@type="radio" and @disabled]'));
     }
 
     /**

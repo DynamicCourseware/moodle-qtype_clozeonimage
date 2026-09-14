@@ -345,6 +345,39 @@ form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-anchor-grid .qtype-clo
     position: relative;
 }
 
+.que.clozeonimage .qtype-clozeonimage-clear-choice {
+    align-items: center;
+    background-color: transparent;
+    block-size: 1.5rem;
+    border: 0;
+    border-radius: var(--bs-border-radius-sm);
+    color: var(--bs-danger-text-emphasis, #842029);
+    cursor: pointer;
+    display: inline-flex;
+    font-weight: 700;
+    inline-size: 1.5rem;
+    inset-block-end: -.75rem;
+    inset-inline-end: -.75rem;
+    justify-content: center;
+    line-height: 1;
+    padding: 0;
+    position: absolute;
+    z-index: 2;
+}
+
+.que.clozeonimage .qtype-clozeonimage-clear-choice[hidden] {
+    display: none;
+}
+
+.que.clozeonimage .qtype-clozeonimage-clear-choice:is(:hover, :focus-visible) {
+    background-color: rgba(var(--bs-danger-rgb), .18);
+}
+
+.que.clozeonimage .qtype-clozeonimage-clear-choice:focus-visible {
+    outline: 2px solid var(--bs-primary);
+    outline-offset: 2px;
+}
+
 .que.clozeonimage .qtype-clozeonimage-subquestion
 .qtype-clozeonimage-feedback-region:not(.subquestion) {
     border-radius: var(--bs-border-radius);

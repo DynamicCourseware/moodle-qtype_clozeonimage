@@ -44,6 +44,7 @@ $string['bgimage'] = 'Image';
 $string['bgimage_help'] = 'Upload the single image on which the Cloze answer controls will be positioned.';
 $string['cannotexportcorruptpositionmetadata'] = 'This Cloze on Image question cannot be exported because its stored position data are inconsistent.';
 $string['cannotexportmissingchild'] = 'This Cloze on Image question cannot be exported because one or more of its subquestions are missing.';
+$string['clearchoiceforsubquestion'] = 'Clear choice for subquestion {$a}';
 $string['clozesubquestionextratext'] = 'The row contains text outside the single Cloze expression.';
 $string['controlappearance'] = 'Control appearance';
 $string['controlappearance_help'] = 'Choose whether positioned answer controls use translucent or opaque backgrounds.';
