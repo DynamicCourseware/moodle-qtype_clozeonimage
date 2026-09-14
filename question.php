@@ -58,6 +58,45 @@ class qtype_clozeonimage_question extends qtype_multianswer_question {
     /** @var int Text format for aftertext. */
     public $aftertextformat = FORMAT_HTML;
 
+    /**
+     * Clear wrong responses while preserving the unanswered sentinel for non-dropdown single-choice controls.
+     *
+     * @param array $response Current response data.
+     * @return array Response data with wrong parts cleared.
+     */
+    #[\Override]
+    public function clear_wrong_from_response(array $response) {
+        $cleanresponse = parent::clear_wrong_from_response($response);
+
+        foreach ($this->subquestions as $index => $subquestion) {
+            if (
+                !($subquestion instanceof qtype_multichoice_single_question) ||
+                    !in_array((int) $subquestion->layout, [
+                        qtype_multichoice_base::LAYOUT_VERTICAL,
+                        qtype_multichoice_base::LAYOUT_HORIZONTAL,
+                    ], true)
+            ) {
+                continue;
+            }
+
+            $substep = $this->get_substep(null, $index);
+            $subresponse = $substep->filter_array($response);
+            [, $state] = $subquestion->grade_response($subresponse);
+            if ($state == question_state::$gradedright) {
+                continue;
+            }
+
+            foreach (array_keys($subresponse) as $name) {
+                $fieldname = $substep->add_prefix($name);
+                if (array_key_exists($fieldname, $cleanresponse) && $cleanresponse[$fieldname] === '') {
+                    $cleanresponse[$fieldname] = '-1';
+                }
+            }
+        }
+
+        return $cleanresponse;
+    }
+
 
     /**
      * Check access to files stored by this question type.

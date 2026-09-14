@@ -117,6 +117,64 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
     }
 
     /**
+     * Make an Interactive question with correct, partially correct, and wrong Multichoice responses.
+     */
+    private function make_interactive_clearwrong_question(): \qtype_clozeonimage_question {
+        $question = $this->make_question(
+            \qtype_clozeonimage::CONTROL_APPEARANCE_TRANSLUCENT,
+            'multichoice_vertical'
+        );
+        $correct = $question->subquestions[1];
+        $correct->shuffleanswers = false;
+        $correct->answers[13]->fraction = -0.3333333;
+        $correct->answers[15]->fraction = 1;
+
+        $partial = \test_question_maker::make_a_multichoice_single_question();
+        $partial->layout = (string) \qtype_multichoice_base::LAYOUT_HORIZONTAL;
+        $partial->shuffleanswers = false;
+        $partial->answers[14]->fraction = 0.5;
+        $question->subquestions[2] = $partial;
+        $question->positions[2] = (object) ['xleft' => 120, 'ytop' => 120, 'anchor' => 4];
+
+        $wrong = \test_question_maker::make_a_multichoice_single_question();
+        $wrong->layout = (string) \qtype_multichoice_base::LAYOUT_VERTICAL;
+        $wrong->shuffleanswers = false;
+        $question->subquestions[3] = $wrong;
+        $question->positions[3] = (object) ['xleft' => 240, 'ytop' => 240, 'anchor' => 4];
+        $question->hints = [new \question_hint_with_parts(1, 'Hint', FORMAT_HTML, false, true)];
+
+        return $question;
+    }
+
+    /**
+     * Extract the actual enabled hidden response fields rendered with the Try again control.
+     *
+     * @return array<string, int|string> Complete POST data for the question usage.
+     */
+    private function try_again_post_from_current_output(): array {
+        $xpath = $this->xpath($this->currentoutput);
+        $prefix = $this->quba->get_field_prefix($this->slot);
+        $post = ['slots' => $this->slot];
+
+        foreach ($xpath->query('//input[@name and not(@disabled)]') as $input) {
+            $type = strtolower($input->getAttribute('type'));
+            if ($type === 'submit') {
+                continue;
+            }
+            if (($type === 'radio' || $type === 'checkbox') && !$input->hasAttribute('checked')) {
+                continue;
+            }
+            $post[$input->getAttribute('name')] = $input->getAttribute('value');
+        }
+
+        $tryagain = $xpath->query('//input[@type="submit" and @name="' . $prefix . '-tryagain"]');
+        $this->assertCount(1, $tryagain);
+        $post[$prefix . '-tryagain'] = $tryagain->item(0)->getAttribute('value');
+
+        return $post;
+    }
+
+    /**
      * Parse rendered output and return an XPath helper.
      *
      * @param string $html Rendered question HTML.
@@ -998,6 +1056,68 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
         $this->assertCount(2, $buttons);
         $this->assertFalse($buttons->item(0)->hasAttribute('hidden'));
         $this->assertTrue($buttons->item(1)->hasAttribute('hidden'));
+    }
+
+    public function test_interactive_clearwrong_preserves_unanswered_multichoice_through_actual_post(): void {
+        $this->start_attempt_at_question($this->make_interactive_clearwrong_question(), 'interactive', 1);
+
+        $this->process_submission([
+            'sub1_answer' => 2,
+            'sub2_answer' => 1,
+            'sub3_answer' => 2,
+            '-submit' => 1,
+        ]);
+        $this->assertSame(
+            \qbehaviour_interactive::TRY_AGAIN_VISIBLE,
+            $this->adjusted_display_options()->readonly
+        );
+
+        $this->render();
+        $prefix = $this->quba->get_field_prefix($this->slot);
+        $post = $this->try_again_post_from_current_output();
+        $this->assertSame('2', $post[$prefix . 'sub1_answer']);
+        $this->assertSame('-1', $post[$prefix . 'sub2_answer']);
+        $this->assertSame('-1', $post[$prefix . 'sub3_answer']);
+
+        $this->quba->process_all_actions(time(), $post);
+        $questionattempt = $this->get_question_attempt();
+        $stepdata = $questionattempt->get_last_step()->get_qt_data();
+        $this->assertSame('2', $stepdata['sub1_answer']);
+        $this->assertSame('-1', $stepdata['sub2_answer']);
+        $this->assertSame('-1', $stepdata['sub3_answer']);
+        $this->assertSame('2', $questionattempt->get_last_qt_var('sub1_answer'));
+        $this->assertSame('-1', $questionattempt->get_last_qt_var('sub2_answer'));
+        $this->assertSame('-1', $questionattempt->get_last_qt_var('sub3_answer'));
+
+        $this->render();
+        $xpath = $this->xpath($this->currentoutput);
+        $correctname = $prefix . 'sub1_answer';
+        $this->assertCount(1, $xpath->query(
+            '//input[@data-role="clozeonimage-multichoice-choice" and @name="' . $correctname .
+                '" and @value="2" and @checked]'
+        ));
+
+        foreach ([2, 3] as $index) {
+            $inputname = $prefix . 'sub' . $index . '_answer';
+            $this->assertCount(0, $xpath->query(
+                '//input[@data-role="clozeonimage-multichoice-choice" and @name="' . $inputname .
+                    '" and @checked]'
+            ));
+            $sentinels = $xpath->query(
+                '//input[@data-role="clozeonimage-clear-choice-sentinel" and @name="' . $inputname . '"]'
+            );
+            $this->assertCount(1, $sentinels);
+            $this->assertSame('-1', $sentinels->item(0)->getAttribute('value'));
+            $this->assertTrue($sentinels->item(0)->hasAttribute('checked'));
+            $this->assertFalse($sentinels->item(0)->hasAttribute('disabled'));
+
+            $buttons = $xpath->query(
+                '//*[@data-region="clozeonimage-multichoice" and .//input[@name="' . $inputname . '"]]' .
+                    '//button[@data-action="clozeonimage-clear-choice"]'
+            );
+            $this->assertCount(1, $buttons);
+            $this->assertTrue($buttons->item(0)->hasAttribute('hidden'));
+        }
     }
 
     public function test_marks_only_readonly_review_retains_feedback_popover(): void {
