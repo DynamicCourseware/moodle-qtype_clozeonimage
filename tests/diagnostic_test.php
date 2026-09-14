@@ -432,6 +432,40 @@ final class diagnostic_test extends \advanced_testcase {
         );
     }
 
+    public function test_multiple_tries_hints_are_reconstructed_in_edit_form(): void {
+        [$form, , , $question] = $this->make_form();
+        $question->hints = [
+            (object) [
+                'id' => 101,
+                'hint' => '<p>First hint.</p>',
+                'hintformat' => FORMAT_HTML,
+                'clearwrong' => 1,
+                'shownumcorrect' => 0,
+            ],
+            (object) [
+                'id' => 102,
+                'hint' => '<p>Second hint.</p>',
+                'hintformat' => FORMAT_HTML,
+                'clearwrong' => 0,
+                'shownumcorrect' => 1,
+            ],
+        ];
+
+        $form->set_data($question);
+        $quickform = $this->get_quickform($form);
+
+        $this->assertSame('<p>First hint.</p>', $quickform->getElement('hint[0]')->getValue()['text']);
+        $this->assertSame('<p>Second hint.</p>', $quickform->getElement('hint[1]')->getValue()['text']);
+        $this->assertSame(
+            ['hintclearwrong[0]' => 1, 'hintshownumcorrect[0]' => 0],
+            $quickform->getElement('hintoptions[0]')->getValue()
+        );
+        $this->assertSame(
+            ['hintclearwrong[1]' => 0, 'hintshownumcorrect[1]' => 1],
+            $quickform->getElement('hintoptions[1]')->getValue()
+        );
+    }
+
     public function test_control_appearance_preview_class(): void {
         [$translucentform] = $this->make_form();
         $translucentpreview = $translucentform->render();

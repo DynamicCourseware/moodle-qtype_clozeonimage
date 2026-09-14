@@ -189,6 +189,51 @@ final class lifecycle_test extends \advanced_testcase {
         $this->assertSame($controlappearance, $runtimequestion->controlappearance);
     }
 
+    public function test_multiple_tries_hints_save_and_load(): void {
+        global $DB, $USER;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        [, $context, $category] = $this->create_question_bank_fixture();
+
+        $formdata = $this->make_initial_form($category, $context, 'hints');
+        $formdata->hint = [
+            ['text' => '<p>First hint.</p>', 'format' => FORMAT_HTML, 'itemid' => 0],
+            ['text' => '<p>Second hint.</p>', 'format' => FORMAT_HTML, 'itemid' => 0],
+        ];
+        $formdata->hintclearwrong = [1, 0];
+        $formdata->hintshownumcorrect = [0, 1];
+        $question = (object) [
+            'qtype' => 'clozeonimage',
+            'createdby' => $USER->id,
+            'idnumber' => null,
+            'status' => question_version_status::QUESTION_STATUS_READY,
+        ];
+
+        $saved = question_bank::get_qtype('clozeonimage')->save_question($question, $formdata);
+        $records = array_values($DB->get_records('question_hints', [
+            'questionid' => $saved->id,
+        ], 'id ASC'));
+
+        $this->assertCount(2, $records);
+        $this->assertSame('<p>First hint.</p>', $records[0]->hint);
+        $this->assertSame(1, (int) $records[0]->clearwrong);
+        $this->assertSame(0, (int) $records[0]->shownumcorrect);
+        $this->assertSame('<p>Second hint.</p>', $records[1]->hint);
+        $this->assertSame(0, (int) $records[1]->clearwrong);
+        $this->assertSame(1, (int) $records[1]->shownumcorrect);
+
+        $loaded = question_bank::load_question_data($saved->id);
+        $hints = array_values($loaded->hints);
+        $this->assertCount(2, $hints);
+        $this->assertSame('<p>First hint.</p>', $hints[0]->hint);
+        $this->assertSame(1, (int) $hints[0]->clearwrong);
+        $this->assertSame(0, (int) $hints[0]->shownumcorrect);
+        $this->assertSame('<p>Second hint.</p>', $hints[1]->hint);
+        $this->assertSame(0, (int) $hints[1]->clearwrong);
+        $this->assertSame(1, (int) $hints[1]->shownumcorrect);
+    }
+
     /**
      * Prepare form-like edit data, including new drafts copied from both plugin file areas.
      *

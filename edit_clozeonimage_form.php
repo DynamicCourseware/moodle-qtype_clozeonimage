@@ -640,6 +640,7 @@ class qtype_clozeonimage_edit_form extends question_edit_form {
             }
         }
 
+        $question = $this->data_preprocessing_hints($question, true, true);
         parent::set_data($question);
     }
 
