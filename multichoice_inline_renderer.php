@@ -109,9 +109,7 @@ class qtype_clozeonimage_multichoice_inline_renderer extends qtype_multianswer_m
             $regionclass .= ' qtype-clozeonimage-state-' . $stateclass;
         }
         $answerlabel = $this->get_answer_label();
-        if ($statustext !== '') {
-            $answerlabel .= ' ' . $statustext;
-        }
+        $answerlabel .= $this->result_state_text($statustext);
 
         $output = html_writer::start_tag('span', ['class' => $regionclass]);
         $output .= html_writer::tag('label', $answerlabel, [

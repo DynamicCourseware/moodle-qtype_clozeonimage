@@ -671,29 +671,33 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
     /**
      * Overall and local review states for each supported control family.
      *
-     * @return array<string, array{string,array<string,int|string>,string,string}>
+     * @return array<string, array{string,array<string,int|string>,string,string,string}>
      */
     public static function review_state_surface_provider(): array {
         return [
-            'Short Answer' => ['shortanswer', ['sub1_answer' => 'wrong'], 'incorrect', 'form-control'],
-            'case-sensitive Short Answer' => [
-                'shortanswer_case_sensitive', ['sub1_answer' => 'wrong'], 'incorrect', 'form-control',
+            'Short Answer' => [
+                'shortanswer', ['sub1_answer' => 'wrong'], 'incorrect', 'form-control', 'incorrect',
             ],
-            'Numerical' => ['numerical', ['sub1_answer' => '999'], 'incorrect', 'form-control'],
-            'dropdown Multichoice' => ['multichoice', ['sub1_answer' => 0], 'correct', 'form-select'],
+            'case-sensitive Short Answer' => [
+                'shortanswer_case_sensitive', ['sub1_answer' => 'wrong'], 'incorrect', 'form-control', 'incorrect',
+            ],
+            'Numerical' => ['numerical', ['sub1_answer' => '999'], 'incorrect', 'form-control', 'incorrect'],
+            'dropdown Multichoice' => [
+                'multichoice', ['sub1_answer' => 0], 'correct', 'form-select', 'correct',
+            ],
             'vertical Multichoice' => [
-                'multichoice_vertical', ['sub1_answer' => 0], 'correct', 'qtype-clozeonimage-choice',
+                'multichoice_vertical', ['sub1_answer' => 0], 'correct', 'qtype-clozeonimage-choice', 'correct',
             ],
             'horizontal Multichoice' => [
-                'multichoice_horizontal', ['sub1_answer' => 0], 'correct', 'qtype-clozeonimage-choice',
+                'multichoice_horizontal', ['sub1_answer' => 0], 'correct', 'qtype-clozeonimage-choice', 'correct',
             ],
             'vertical Multiple Response' => [
                 'multiresponse_vertical', ['sub1_choice0' => 1], 'partiallycorrect',
-                'qtype-clozeonimage-choice',
+                'qtype-clozeonimage-choice', 'partiallycorrect',
             ],
             'horizontal Multiple Response' => [
                 'multiresponse_horizontal', ['sub1_choice0' => 1], 'partiallycorrect',
-                'qtype-clozeonimage-choice',
+                'qtype-clozeonimage-choice', 'partiallycorrect',
             ],
         ];
     }
@@ -703,14 +707,14 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
         string $subquestiontype,
         array $response,
         string $globalstate,
-        string $localclass
+        string $localclass,
+        string $expectedlocalstate
     ): void {
         $xpath = $this->xpath($this->render_review($subquestiontype, $response));
         $regions = $xpath->query('//*[contains(concat(" ", normalize-space(@class), " "), ' .
             '" qtype-clozeonimage-state-' . $globalstate . ' ")]');
         $this->assertCount(1, $regions);
         $region = $regions->item(0);
-        $expectedlocalstate = $globalstate === 'partiallycorrect' ? 'correct' : $globalstate;
         $this->assertCount(1, $xpath->query('.//*[contains(concat(" ", normalize-space(@class), " "), ' .
             '" ' . $localclass . ' ") and contains(concat(" ", normalize-space(@class), " "), ' .
             '" ' . $expectedlocalstate . ' ")]', $region));
@@ -782,9 +786,10 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
         $this->assertCount(0, $xpath->query('.//img', $region));
         $this->assertCount(0, $xpath->query('.//*[contains(concat(" ", normalize-space(@class), " "), ' .
             '" specificfeedback ") or contains(concat(" ", normalize-space(@class), " "), " outcome ")]', $region));
+        $this->assertStringNotContainsString(' feedbacktrigger ', ' ' . $surface->getAttribute('class') . ' ');
     }
 
-    public function test_multiresponse_review_uses_global_partial_state_and_local_correct_state(): void {
+    public function test_multiresponse_review_uses_global_and_local_partial_state_for_incomplete_positive_set(): void {
         $xpath = $this->xpath($this->render_review('multiresponse_vertical', ['sub1_choice0' => 1]));
         $regions = $xpath->query('//*[contains(concat(" ", normalize-space(@class), " "), ' .
             '" qtype-clozeonimage-state-partiallycorrect ")]');
@@ -792,14 +797,131 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
         $region = $regions->item(0);
         $this->assertCount(1, $xpath->query('.//*[contains(concat(" ", normalize-space(@class), " "), ' .
             '" qtype-clozeonimage-choice ") and contains(concat(" ", normalize-space(@class), " "), ' .
-            '" correct ")]', $region));
+            '" partiallycorrect ")]', $region));
         $this->assertCount(0, $xpath->query('.//*[contains(concat(" ", normalize-space(@class), " "), ' .
             '" qtype-clozeonimage-choice ") and contains(concat(" ", normalize-space(@class), " "), ' .
-            '" partiallycorrect ")]', $region));
+            '" correct ")]', $region));
         $this->assertStringContainsString(
             \question_state::$gradedpartial->default_string(true),
             $xpath->query('.//*[@id and contains(@id, "-label")]', $region)->item(0)->textContent
         );
+    }
+
+    /**
+     * Multiple Response selections and their independent global and local states.
+     *
+     * @return array<string, array{string,array<string,int>,string,int,int,int}>
+     */
+    public static function multiresponse_local_state_provider(): array {
+        return [
+            'first positive only' => [
+                'multiresponse_vertical', ['sub1_choice0' => 1], 'partiallycorrect', 0, 1, 0,
+            ],
+            'second positive only' => [
+                'multiresponse_horizontal', ['sub1_choice2' => 1], 'partiallycorrect', 0, 1, 0,
+            ],
+            'incorrect only' => [
+                'multiresponse_vertical', ['sub1_choice1' => 1], 'incorrect', 0, 0, 1,
+            ],
+            'complete positive set' => [
+                'multiresponse_horizontal', ['sub1_choice0' => 1, 'sub1_choice2' => 1], 'correct', 2, 0, 0,
+            ],
+            'first positive and incorrect' => [
+                'multiresponse_vertical', ['sub1_choice0' => 1, 'sub1_choice1' => 1], 'incorrect', 0, 1, 1,
+            ],
+            'second positive and incorrect' => [
+                'multiresponse_horizontal', ['sub1_choice2' => 1, 'sub1_choice1' => 1], 'incorrect', 0, 1, 1,
+            ],
+            'complete positive set and incorrect' => [
+                'multiresponse_vertical', [
+                    'sub1_choice0' => 1,
+                    'sub1_choice2' => 1,
+                    'sub1_choice1' => 1,
+                ], 'incorrect', 2, 0, 1,
+            ],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('multiresponse_local_state_provider')]
+    public function test_multiresponse_global_and_local_states_are_independent(
+        string $subquestiontype,
+        array $response,
+        string $globalstate,
+        int $correctcount,
+        int $partialcount,
+        int $incorrectcount
+    ): void {
+        $xpath = $this->xpath($this->render_review($subquestiontype, $response));
+        $regions = $xpath->query('//*[contains(concat(" ", normalize-space(@class), " "), ' .
+            '" qtype-clozeonimage-state-' . $globalstate . ' ")]');
+        $this->assertCount(1, $regions);
+        $region = $regions->item(0);
+        $selected = './/*[contains(concat(" ", normalize-space(@class), " "), ' .
+            '" qtype-clozeonimage-choice ")][.//input[@checked]]';
+
+        $this->assertCount($correctcount, $xpath->query(
+            $selected . '[contains(concat(" ", normalize-space(@class), " "), " correct ")]',
+            $region
+        ));
+        $this->assertCount($partialcount, $xpath->query(
+            $selected . '[contains(concat(" ", normalize-space(@class), " "), " partiallycorrect ")]',
+            $region
+        ));
+        $this->assertCount($incorrectcount, $xpath->query(
+            $selected . '[contains(concat(" ", normalize-space(@class), " "), " incorrect ")]',
+            $region
+        ));
+        $this->assertCount(0, $xpath->query(
+            './/*[contains(concat(" ", normalize-space(@class), " "), " qtype-clozeonimage-choice ")]' .
+                '[not(.//input[@checked])]' .
+                '[contains(concat(" ", normalize-space(@class), " "), " correct ") or ' .
+                'contains(concat(" ", normalize-space(@class), " "), " partiallycorrect ") or ' .
+                'contains(concat(" ", normalize-space(@class), " "), " incorrect ")]',
+            $region
+        ));
+    }
+
+    public function test_multiresponse_local_state_uses_answer_fractions_after_shuffling(): void {
+        $question = $this->make_question(
+            \qtype_clozeonimage::CONTROL_APPEARANCE_TRANSLUCENT,
+            'multiresponse_horizontal_shuffled'
+        );
+        $this->start_attempt_at_question($question, 'deferredfeedback', 1);
+        $response = [];
+        $positivecount = 0;
+        $negativeadded = false;
+        foreach ($question->subquestions[1]->get_order($this->get_question_attempt()) as $value => $answerid) {
+            $fraction = $question->subquestions[1]->answers[$answerid]->fraction;
+            if ($fraction > 0) {
+                $response['sub1_choice' . $value] = 1;
+                $positivecount++;
+            } else if ($fraction < 0 && !$negativeadded) {
+                $response['sub1_choice' . $value] = 1;
+                $negativeadded = true;
+            }
+        }
+        $this->assertSame(2, $positivecount);
+        $this->assertTrue($negativeadded);
+
+        $this->process_submission($response);
+        $this->finish();
+        $this->displayoptions->correctness = true;
+        $this->displayoptions->feedback = true;
+        $this->render();
+        $xpath = $this->xpath($this->currentoutput);
+        $regions = $xpath->query('//*[contains(concat(" ", normalize-space(@class), " "), ' .
+            '" qtype-clozeonimage-state-incorrect ")]');
+        $this->assertCount(1, $regions);
+        $region = $regions->item(0);
+        $this->assertCount(2, $xpath->query('.//*[contains(concat(" ", normalize-space(@class), " "), ' .
+            '" qtype-clozeonimage-choice ") and contains(concat(" ", normalize-space(@class), " "), ' .
+            '" correct ")]', $region));
+        $this->assertCount(1, $xpath->query('.//*[contains(concat(" ", normalize-space(@class), " "), ' .
+            '" qtype-clozeonimage-choice ") and contains(concat(" ", normalize-space(@class), " "), ' .
+            '" incorrect ")]', $region));
+        $this->assertCount(0, $xpath->query('.//*[contains(concat(" ", normalize-space(@class), " "), ' .
+            '" qtype-clozeonimage-choice ") and contains(concat(" ", normalize-space(@class), " "), ' .
+            '" partiallycorrect ")]', $region));
     }
 
     public function test_multiresponse_selected_invalid_choice_has_local_incorrect_state(): void {
@@ -815,7 +937,76 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
         )->item(0)->getAttribute('data-bs-content'));
     }
 
-    public function test_multiresponse_selected_zero_weight_choice_remains_locally_neutral(): void {
+    /**
+     * Multiple Response layouts and appearances used to verify local-state paint structure.
+     *
+     * @return array<string, array{string,int,string,string}>
+     */
+    public static function multiresponse_incorrect_paint_structure_provider(): array {
+        return [
+            'vertical translucent' => [
+                'multiresponse_vertical', \qtype_clozeonimage::CONTROL_APPEARANCE_TRANSLUCENT,
+                'qtype-clozeonimage-appearance-translucent', 'div',
+            ],
+            'vertical opaque' => [
+                'multiresponse_vertical', \qtype_clozeonimage::CONTROL_APPEARANCE_OPAQUE,
+                'qtype-clozeonimage-appearance-opaque', 'div',
+            ],
+            'horizontal translucent' => [
+                'multiresponse_horizontal', \qtype_clozeonimage::CONTROL_APPEARANCE_TRANSLUCENT,
+                'qtype-clozeonimage-appearance-translucent', 'td',
+            ],
+            'horizontal opaque' => [
+                'multiresponse_horizontal', \qtype_clozeonimage::CONTROL_APPEARANCE_OPAQUE,
+                'qtype-clozeonimage-appearance-opaque', 'td',
+            ],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('multiresponse_incorrect_paint_structure_provider')]
+    public function test_multiresponse_negative_choice_has_paintable_incorrect_wrapper(
+        string $subquestiontype,
+        int $appearance,
+        string $appearanceclass,
+        string $wrappertag
+    ): void {
+        $question = $this->make_question($appearance, $subquestiontype);
+        $question->subquestions[1]->shuffleanswers = false;
+        $this->assertLessThan(0, $question->subquestions[1]->answers[14]->fraction);
+        $this->start_attempt_at_question($question, 'deferredfeedback', 1);
+        $this->process_submission(['sub1_choice1' => 1]);
+        $this->finish();
+        $this->displayoptions->correctness = true;
+
+        $this->render();
+        $xpath = $this->xpath($this->currentoutput);
+        $compositions = $xpath->query('//*[contains(concat(" ", normalize-space(@class), " "), ' .
+            '" qtype-clozeonimage-composition ") and contains(concat(" ", normalize-space(@class), " "), ' .
+            '" ' . $appearanceclass . ' ")]');
+        $this->assertCount(1, $compositions);
+        $incorrectchoices = $xpath->query(
+            './/' . $wrappertag . '[contains(concat(" ", normalize-space(@class), " "), ' .
+            '" qtype-clozeonimage-choice ") and contains(concat(" ", normalize-space(@class), " "), ' .
+            '" incorrect ") and .//input[@type="checkbox" and @checked]]',
+            $compositions->item(0)
+        );
+        $this->assertCount(1, $incorrectchoices);
+        $this->assertCount(1, $xpath->query(
+            './span[contains(concat(" ", normalize-space(@class), " "), ' .
+            '" qtype-clozeonimage-choice-control ")]',
+            $incorrectchoices->item(0)
+        ));
+        $this->assertCount(0, $xpath->query(
+            './/*[contains(concat(" ", normalize-space(@class), " "), ' .
+            '" qtype-clozeonimage-choice ") and not(.//input[@checked]) and (' .
+            'contains(concat(" ", normalize-space(@class), " "), " correct ") or ' .
+            'contains(concat(" ", normalize-space(@class), " "), " partiallycorrect ") or ' .
+            'contains(concat(" ", normalize-space(@class), " "), " incorrect "))]',
+            $compositions->item(0)
+        ));
+    }
+
+    public function test_multiresponse_selected_zero_weight_choice_has_local_incorrect_state(): void {
         $xpath = $this->xpath($this->render_review('multiresponse_zero', ['sub1_choice0' => 1]));
         $this->assertCount(1, $xpath->query('//*[contains(concat(" ", normalize-space(@class), " "), ' .
             '" qtype-clozeonimage-state-incorrect ")]'));
@@ -823,7 +1014,7 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
             '" qtype-clozeonimage-choice ")][.//input[@checked]]');
         $this->assertCount(1, $selectedchoices);
         $this->assertStringNotContainsString(' correct ', ' ' . $selectedchoices->item(0)->getAttribute('class') . ' ');
-        $this->assertStringNotContainsString(' incorrect ', ' ' . $selectedchoices->item(0)->getAttribute('class') . ' ');
+        $this->assertStringContainsString(' incorrect ', ' ' . $selectedchoices->item(0)->getAttribute('class') . ' ');
         $this->assertStringNotContainsString(
             ' partiallycorrect ',
             ' ' . $selectedchoices->item(0)->getAttribute('class') . ' '
@@ -1205,6 +1396,8 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
         $this->assert_structured_feedback($trigger->getAttribute('data-bs-content'));
         $this->assertCount(0, $xpath->query('//a[contains(concat(" ", normalize-space(@class), " "), ' .
             '" feedbacktrigger ")]'));
+        $this->assertCount(0, $xpath->query('//*[contains(concat(" ", normalize-space(@class), " "), ' .
+            '" feedbacktrigger ")]'));
         $this->assertCount(0, $xpath->query('//img[contains(@src, "grade_")]'));
 
         if ($subquestiontype === 'multichoice') {
@@ -1219,54 +1412,212 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
         }
     }
 
-    public function test_enabled_choice_controls_are_feedback_triggers_without_overlay(): void {
-        $this->start_attempt_at_question(
-            $this->make_question(
-                \qtype_clozeonimage::CONTROL_APPEARANCE_TRANSLUCENT,
-                'multiresponse_horizontal'
-            ),
-            'adaptive',
-            1
-        );
-        $this->process_submission(['sub1_choice0' => 1, '-submit' => 1]);
-        $this->displayoptions->correctness = true;
-        $this->displayoptions->feedback = true;
-        $this->render();
-
-        $xpath = $this->xpath($this->currentoutput);
-        $inputs = $xpath->query('//input[@type="checkbox"]');
-        $this->assertCount(4, $inputs);
-        foreach ($inputs as $input) {
-            $this->assertFalse($input->hasAttribute('disabled'));
-            $this->assertSame('popover', $input->getAttribute('data-bs-toggle'));
-            $this->assertFalse($input->hasAttribute('role'));
-        }
-        $this->assertCount(0, $xpath->query('//button[contains(concat(" ", normalize-space(@class), " "), ' .
-            '" qtype-clozeonimage-review-surface ")]'));
+    /**
+     * Editable control families that expose the previous result after an Adaptive Check.
+     *
+     * @return array<string, array{string,array<string,int|string>,string,int}>
+     */
+    public static function adaptive_feedback_control_provider(): array {
+        return [
+            'Short Answer' => ['shortanswer', ['sub1_answer' => 'wrong'], '//input[@type="text"]', 1],
+            'case-sensitive Short Answer' => [
+                'shortanswer_case_sensitive', ['sub1_answer' => 'wrong'], '//input[@type="text"]', 1,
+            ],
+            'Numerical' => ['numerical', ['sub1_answer' => '999'], '//input[@type="text"]', 1],
+            'dropdown Multichoice' => ['multichoice', ['sub1_answer' => 1], '//select', 1],
+            'vertical Multichoice' => [
+                'multichoice_vertical', ['sub1_answer' => 1],
+                '//input[@data-role="clozeonimage-multichoice-choice"]', 3,
+            ],
+            'horizontal Multichoice' => [
+                'multichoice_horizontal', ['sub1_answer' => 1],
+                '//input[@data-role="clozeonimage-multichoice-choice"]', 3,
+            ],
+            'vertical Multiple Response' => [
+                'multiresponse_vertical', ['sub1_choice0' => 1], '//input[@type="checkbox"]', 4,
+            ],
+            'horizontal Multiple Response' => [
+                'multiresponse_horizontal', ['sub1_choice0' => 1], '//input[@type="checkbox"]', 4,
+            ],
+        ];
     }
 
-    public function test_enabled_dropdown_is_its_own_feedback_trigger_without_overlay(): void {
+    #[\PHPUnit\Framework\Attributes\DataProvider('adaptive_feedback_control_provider')]
+    public function test_adaptive_feedback_uses_enabled_plugin_owned_native_triggers(
+        string $subquestiontype,
+        array $response,
+        string $controlxpath,
+        int $controlcount
+    ): void {
+        $this->start_attempt_at_question(
+            $this->make_question(\qtype_clozeonimage::CONTROL_APPEARANCE_TRANSLUCENT, $subquestiontype),
+            'adaptive',
+            1
+        );
+
+        $this->render();
+        $this->assert_no_feedback_trigger_markup($this->xpath($this->currentoutput));
+
+        $this->process_submission($response + ['-submit' => 1]);
+        $this->displayoptions->correctness = true;
+        $this->displayoptions->feedback = true;
+        $options = $this->adjusted_display_options();
+        $this->assertFalse($options->readonly);
+        $this->assertTrue((bool) $options->correctness);
+        $this->assertTrue((bool) $options->feedback);
+        $this->assertFalse((bool) $options->rightanswer);
+        $this->assertSame(\question_display_options::MARK_AND_MAX, $options->marks);
+
+        $this->render();
+        $xpath = $this->xpath($this->currentoutput);
+        $controls = $xpath->query($controlxpath);
+        $this->assertCount($controlcount, $controls);
+        $ischoicegroup = str_contains($subquestiontype, 'vertical') ||
+            str_contains($subquestiontype, 'horizontal');
+        foreach ($controls as $control) {
+            $this->assertFalse($control->hasAttribute('disabled'));
+            $this->assertFalse($control->hasAttribute('readonly'));
+            $this->assertStringNotContainsString(' feedbacktrigger ', ' ' . $control->getAttribute('class') . ' ');
+            if ($ischoicegroup) {
+                $this->assertStringNotContainsString(
+                    ' qtype-clozeonimage-feedback-trigger ',
+                    ' ' . $control->getAttribute('class') . ' '
+                );
+                $this->assertFalse($control->hasAttribute('data-bs-toggle'));
+                $this->assertFalse($control->hasAttribute('data-bs-content'));
+            } else {
+                $this->assertStringContainsString(
+                    ' qtype-clozeonimage-feedback-trigger ',
+                    ' ' . $control->getAttribute('class') . ' '
+                );
+                $this->assertSame('popover', $control->getAttribute('data-bs-toggle'));
+                $this->assertNotSame('', $control->getAttribute('data-bs-content'));
+            }
+        }
+        $this->assertCount(0, $xpath->query('//*[contains(concat(" ", normalize-space(@class), " "), ' .
+            '" feedbacktrigger ")]'));
+        $this->assertCount(0, $xpath->query('//button[contains(concat(" ", normalize-space(@class), " "), ' .
+            '" qtype-clozeonimage-review-surface ")]'));
+        $this->assertGreaterThanOrEqual(1, $xpath->query('//*[@data-role="clozeonimage-result-state"]')->length);
+
+        if ($ischoicegroup) {
+            $grouptriggers = $xpath->query(
+                '//*[contains(concat(" ", normalize-space(@class), " "), ' .
+                '" qtype-clozeonimage-feedback-region ") and ' .
+                'contains(concat(" ", normalize-space(@class), " "), ' .
+                '" qtype-clozeonimage-feedback-trigger ") and @data-bs-toggle="popover"]'
+            );
+            $this->assertCount(1, $grouptriggers);
+            $this->assertNotSame('', $grouptriggers->item(0)->getAttribute('data-bs-content'));
+            $this->assertCount(0, $xpath->query(
+                '//*[contains(concat(" ", normalize-space(@class), " "), ' .
+                '" qtype-clozeonimage-choice ")]//*[@data-bs-toggle="popover"]'
+            ));
+        }
+
+        if ($subquestiontype === 'multichoice') {
+            $selectclass = ' ' . $controls->item(0)->getAttribute('class') . ' ';
+            $this->assertStringContainsString(' incorrect ', $selectclass);
+            $this->assertStringNotContainsString(' correct ', $selectclass);
+            $this->assertStringNotContainsString(' partiallycorrect ', $selectclass);
+            $selectedoptions = $xpath->query('//select/option[@selected]');
+            $this->assertCount(1, $selectedoptions);
+            $this->assertCount(0, $xpath->query(
+                '//select/option[contains(concat(" ", normalize-space(@class), " "), " correct ") or ' .
+                'contains(concat(" ", normalize-space(@class), " "), " incorrect ") or ' .
+                'contains(concat(" ", normalize-space(@class), " "), " partiallycorrect ")]'
+            ));
+            $this->assertCount(1, $xpath->query('//*[contains(concat(" ", normalize-space(@class), " "), ' .
+                '" qtype-clozeonimage-state-incorrect ")]'));
+        }
+    }
+
+    public function test_adaptive_checked_multichoice_hides_clear_until_response_changes(): void {
         $this->start_attempt_at_question(
             $this->make_question(
                 \qtype_clozeonimage::CONTROL_APPEARANCE_TRANSLUCENT,
-                'multichoice'
+                'multichoice_vertical'
             ),
             'adaptive',
             1
         );
-        $this->process_submission(['sub1_answer' => 0, '-submit' => 1]);
+        $this->process_submission(['sub1_answer' => 1, '-submit' => 1]);
         $this->displayoptions->correctness = true;
         $this->displayoptions->feedback = true;
-        $this->render();
 
+        $this->render();
         $xpath = $this->xpath($this->currentoutput);
-        $selects = $xpath->query('//select');
+        $this->assertCount(1, $xpath->query(
+            '//input[@data-role="clozeonimage-multichoice-choice" and @value="1" and @checked]'
+        ));
+        $this->assertCount(1, $xpath->query(
+            '//*[@data-region="clozeonimage-multichoice" and ' .
+            'contains(concat(" ", normalize-space(@class), " "), ' .
+            '" qtype-clozeonimage-feedback-trigger ")]'
+        ));
+        $clearbuttons = $xpath->query('//button[@data-action="clozeonimage-clear-choice"]');
+        $this->assertCount(1, $clearbuttons);
+        $this->assertTrue($clearbuttons->item(0)->hasAttribute('hidden'));
+
+        $this->process_submission(['sub1_answer' => 2]);
+        $this->displayoptions->correctness = false;
+        $this->displayoptions->feedback = false;
+        $this->render();
+        $xpath = $this->xpath($this->currentoutput);
+        $this->assert_no_feedback_trigger_markup($xpath);
+        $this->assertCount(1, $xpath->query(
+            '//input[@data-role="clozeonimage-multichoice-choice" and @value="2" and @checked]'
+        ));
+        $clearbuttons = $xpath->query('//button[@data-action="clozeonimage-clear-choice"]');
+        $this->assertCount(1, $clearbuttons);
+        $this->assertFalse($clearbuttons->item(0)->hasAttribute('hidden'));
+    }
+
+    /**
+     * Result states displayed on an editable Adaptive dropdown.
+     *
+     * @return array<string, array{string,?float,string}>
+     */
+    public static function adaptive_dropdown_state_provider(): array {
+        return [
+            'correct' => ['0', null, 'correct'],
+            'partially correct' => ['1', 0.5, 'partiallycorrect'],
+            'incorrect' => ['1', null, 'incorrect'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('adaptive_dropdown_state_provider')]
+    public function test_adaptive_dropdown_carries_local_state_on_select_only(
+        string $response,
+        ?float $answerfraction,
+        string $expectedstate
+    ): void {
+        $question = $this->make_question(
+            \qtype_clozeonimage::CONTROL_APPEARANCE_TRANSLUCENT,
+            'multichoice'
+        );
+        if ($answerfraction !== null) {
+            $question->subquestions[1]->answers[14]->fraction = $answerfraction;
+        }
+        $this->start_attempt_at_question($question, 'adaptive', 1);
+        $this->process_submission(['sub1_answer' => $response, '-submit' => 1]);
+        $this->displayoptions->correctness = true;
+        $this->displayoptions->feedback = true;
+
+        $this->render();
+        $xpath = $this->xpath($this->currentoutput);
+        $selects = $xpath->query('//select[contains(concat(" ", normalize-space(@class), " "), ' .
+            '" ' . $expectedstate . ' ")]');
         $this->assertCount(1, $selects);
         $select = $selects->item(0);
         $this->assertFalse($select->hasAttribute('disabled'));
-        $this->assertSame('popover', $select->getAttribute('data-bs-toggle'));
-        $this->assertCount(0, $xpath->query('//button[contains(concat(" ", normalize-space(@class), " "), ' .
-            '" qtype-clozeonimage-review-surface ")]'));
+        $this->assertCount(1, $xpath->query('.//option[@selected]', $select));
+        $this->assertCount(0, $xpath->query(
+            './/option[contains(concat(" ", normalize-space(@class), " "), " correct ") or ' .
+            'contains(concat(" ", normalize-space(@class), " "), " incorrect ") or ' .
+            'contains(concat(" ", normalize-space(@class), " "), " partiallycorrect ")]',
+            $select
+        ));
     }
 
     public function test_mixed_appearance_feedback_triggers_remain_independent(): void {

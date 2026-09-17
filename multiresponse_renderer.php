@@ -116,14 +116,17 @@ class qtype_clozeonimage_multiresponse_renderer extends qtype_multianswer_subq_r
         ];
         if ($options->readonly) {
             $inputattributes['disabled'] = 'disabled';
-        } else {
-            $inputattributes = $this->feedback_trigger_attributes($inputattributes, $feedbackpopup);
         }
 
         $grouplabelid = $basename . '-label';
         $grouplabel = $this->get_answer_label('multichoicex', 'qtype_multianswer');
-        if ($statustext !== '') {
-            $grouplabel .= ' ' . $statustext;
+        $grouplabel .= $this->result_state_text($statustext);
+        $allpositiveanswersselected = true;
+        foreach ($order as $value => $ansid) {
+            if ($subq->answers[$ansid]->fraction > 0 && !$subq->is_choice_selected($response, $value)) {
+                $allpositiveanswersselected = false;
+                break;
+            }
         }
         $result = html_writer::span($grouplabel, 'visually-hidden', ['id' => $grouplabelid]);
         $result .= $this->choices_wrapper_start($horizontal);
@@ -142,9 +145,14 @@ class qtype_clozeonimage_multiresponse_renderer extends qtype_multianswer_subq_r
             $localstate = null;
             if ($options->correctness && $isselected) {
                 if ($answer->fraction > 0) {
-                    $class .= ' correct';
-                    $localstate = question_state::$gradedright;
-                } else if ($answer->fraction < 0) {
+                    if ($allpositiveanswersselected) {
+                        $class .= ' correct';
+                        $localstate = question_state::$gradedright;
+                    } else {
+                        $class .= ' partiallycorrect';
+                        $localstate = question_state::$gradedpartial;
+                    }
+                } else {
                     $class .= ' incorrect';
                     $localstate = question_state::$gradedwrong;
                 }
@@ -164,10 +172,7 @@ class qtype_clozeonimage_multiresponse_renderer extends qtype_multianswer_subq_r
                 $ansid
             );
             if ($localstate !== null) {
-                $choicelabel .= html_writer::span(
-                    ' ' . $localstate->default_string(true),
-                    'visually-hidden'
-                );
+                $choicelabel .= $this->result_state_text($localstate->default_string(true));
             }
             $control .= html_writer::tag(
                 'label',
@@ -186,10 +191,15 @@ class qtype_clozeonimage_multiresponse_renderer extends qtype_multianswer_subq_r
         if ($stateclass !== '') {
             $regionclass .= ' qtype-clozeonimage-state-' . $stateclass;
         }
-        return html_writer::div($result, $regionclass, [
+        $regionattributes = [
+            'class' => $regionclass,
             'role' => 'group',
             'aria-labelledby' => $grouplabelid,
-        ]);
+        ];
+        if (!$options->readonly) {
+            $regionattributes = $this->feedback_trigger_attributes($regionattributes, $feedbackpopup);
+        }
+        return html_writer::div($result, '', $regionattributes);
     }
 
     /**

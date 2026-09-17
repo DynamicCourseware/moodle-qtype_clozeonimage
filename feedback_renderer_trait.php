@@ -142,10 +142,8 @@ trait qtype_clozeonimage_feedback_renderer_trait {
             return $attributes;
         }
 
-        $this->page->requires->js_call_amd('qtype_multianswer/feedback', 'initPopovers');
         $this->page->requires->js_call_amd('qtype_clozeonimage/feedback', 'init');
-        $attributes['class'] = trim(($attributes['class'] ?? '') .
-            ' feedbacktrigger qtype-clozeonimage-feedback-trigger');
+        $attributes['class'] = trim(($attributes['class'] ?? '') . ' qtype-clozeonimage-feedback-trigger');
         $attributes['data-bs-toggle'] = 'popover';
         $attributes['data-bs-container'] = 'body';
         $attributes['data-bs-content'] = $feedbackcontents;
@@ -154,6 +152,24 @@ trait qtype_clozeonimage_feedback_renderer_trait {
         $attributes['data-bs-html'] = 'true';
         $attributes['data-bs-custom-class'] = $this->feedbackpopoverclass;
         return $attributes;
+    }
+
+    /**
+     * Render localized result text that can be removed independently when an editable response changes.
+     *
+     * @param string $statustext Localized result status.
+     * @return string Visually hidden result text, or an empty string.
+     */
+    protected function result_state_text(string $statustext): string {
+        if ($statustext === '') {
+            return '';
+        }
+
+        return html_writer::span(
+            ' ' . $statustext,
+            'visually-hidden qtype-clozeonimage-result-state',
+            ['data-role' => 'clozeonimage-result-state']
+        );
     }
 
     /**

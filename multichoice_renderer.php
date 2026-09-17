@@ -100,14 +100,10 @@ class qtype_clozeonimage_multichoice_renderer extends qtype_multianswer_subq_ren
         ];
         if ($options->readonly) {
             $inputattributes['disabled'] = 'disabled';
-        } else {
-            $inputattributes = $this->feedback_trigger_attributes($inputattributes, $feedbackpopup);
         }
 
         $legend = $this->get_answer_label('multichoicex', 'qtype_multianswer');
-        if ($statustext !== '') {
-            $legend .= ' ' . $statustext;
-        }
+        $legend .= $this->result_state_text($statustext);
         $result = $this->choices_wrapper_start($legend);
         foreach ($order as $value => $ansid) {
             $answer = $subq->answers[$ansid];
@@ -139,9 +135,8 @@ class qtype_clozeonimage_multichoice_renderer extends qtype_multianswer_subq_ren
                 $ansid
             );
             if ($options->correctness && $isselected) {
-                $choicelabel .= html_writer::span(
-                    ' ' . question_state::graded_state_for_fraction($answer->fraction)->default_string(true),
-                    'visually-hidden'
+                $choicelabel .= $this->result_state_text(
+                    question_state::graded_state_for_fraction($answer->fraction)->default_string(true)
                 );
             }
             $control .= html_writer::tag(
@@ -181,7 +176,7 @@ class qtype_clozeonimage_multichoice_renderer extends qtype_multianswer_subq_ren
                 'data-action' => 'clozeonimage-clear-choice',
                 'title' => $clearlabel,
             ];
-            if (!$answered) {
+            if (!$answered || $feedbackpopup !== '') {
                 $buttonattributes['hidden'] = 'hidden';
             }
             $result .= html_writer::tag(
@@ -197,9 +192,14 @@ class qtype_clozeonimage_multichoice_renderer extends qtype_multianswer_subq_ren
         if ($stateclass !== '') {
             $regionclass .= ' qtype-clozeonimage-state-' . $stateclass;
         }
-        return html_writer::div($result, $regionclass, [
+        $regionattributes = [
+            'class' => $regionclass,
             'data-region' => 'clozeonimage-multichoice',
-        ]);
+        ];
+        if (!$options->readonly) {
+            $regionattributes = $this->feedback_trigger_attributes($regionattributes, $feedbackpopup);
+        }
+        return html_writer::div($result, '', $regionattributes);
     }
 
     /**

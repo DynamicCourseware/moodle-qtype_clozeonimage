@@ -24,14 +24,41 @@ define(['bootstrap'], function(Bootstrap) {
 
     'use strict';
 
-    const triggerSelector =
-        '.que.clozeonimage .qtype-clozeonimage-feedback-trigger[data-bs-toggle="popover"]';
+    const localTriggerSelector = '.qtype-clozeonimage-feedback-trigger[data-bs-toggle="popover"]';
+    const triggerSelector = `.que.clozeonimage ${localTriggerSelector}`;
     const feedbackRegionSelector = '.qtype-clozeonimage-feedback-region';
-    const activeRegionClass = 'qtype-clozeonimage-feedback-active';
+    const clearSentinelSelector = '[data-role="clozeonimage-clear-choice-sentinel"]';
+    const resultStateSelector = '[data-role="clozeonimage-result-state"]';
+    const localStateSelector = [
+        '.form-control.correct',
+        '.form-control.incorrect',
+        '.form-control.partiallycorrect',
+        '.form-select.correct',
+        '.form-select.incorrect',
+        '.form-select.partiallycorrect',
+        '.qtype-clozeonimage-choice.correct',
+        '.qtype-clozeonimage-choice.incorrect',
+        '.qtype-clozeonimage-choice.partiallycorrect',
+    ].join(',');
+    const stateClasses = [
+        'qtype-clozeonimage-state-correct',
+        'qtype-clozeonimage-state-incorrect',
+        'qtype-clozeonimage-state-partiallycorrect',
+        'qtype-clozeonimage-state-notanswered',
+    ];
+    const popoverAttributes = [
+        'data-bs-toggle',
+        'data-bs-container',
+        'data-bs-content',
+        'data-bs-placement',
+        'data-bs-trigger',
+        'data-bs-html',
+        'data-bs-custom-class',
+        'aria-describedby',
+    ];
     let initialised = false;
     let transientTrigger = null;
     let pinnedTrigger = null;
-    const visibleTriggers = new Set();
 
     /**
      * Hide one feedback popover and optionally remove focus from its trigger.
@@ -47,8 +74,8 @@ define(['bootstrap'], function(Bootstrap) {
             pinnedTrigger = null;
         }
         Bootstrap.Popover.getInstance(trigger)?.hide();
-        if (blur && document.activeElement === trigger) {
-            trigger.blur();
+        if (blur && (document.activeElement === trigger || trigger.contains(document.activeElement))) {
+            document.activeElement.blur();
         }
         if (transientTrigger === trigger) {
             transientTrigger = null;
@@ -83,16 +110,6 @@ define(['bootstrap'], function(Bootstrap) {
     };
 
     /**
-     * Mark the owning feedback region active when its popover is visible.
-     *
-     * @param {Event} event Popover shown event.
-     */
-    const popoverShown = event => {
-        visibleTriggers.add(event.target);
-        event.target.closest(feedbackRegionSelector)?.classList.add(activeRegionClass);
-    };
-
-    /**
      * Forget a transient trigger after Bootstrap has hidden its popover.
      *
      * @param {Event} event Popover hidden event.
@@ -101,26 +118,62 @@ define(['bootstrap'], function(Bootstrap) {
         if (event.target === transientTrigger) {
             transientTrigger = null;
         }
-        visibleTriggers.delete(event.target);
-        const region = event.target.closest(feedbackRegionSelector);
-        if (region && !Array.from(visibleTriggers).some(
-            trigger => trigger.closest(feedbackRegionSelector) === region
-        )) {
-            region.classList.remove(activeRegionClass);
+    };
+
+    /**
+     * Remove one stale popover trigger without moving focus or changing its answer.
+     *
+     * @param {HTMLElement} trigger Feedback trigger.
+     */
+    const discardTrigger = trigger => {
+        if (pinnedTrigger === trigger) {
+            pinnedTrigger = null;
         }
+        if (transientTrigger === trigger) {
+            transientTrigger = null;
+        }
+        Bootstrap.Popover.getInstance(trigger)?.dispose();
+        trigger.classList.remove('qtype-clozeonimage-feedback-trigger');
+        popoverAttributes.forEach(attribute => trigger.removeAttribute(attribute));
+    };
+
+    /**
+     * Return one editable feedback region to its neutral state after its answer changes.
+     *
+     * @param {HTMLElement} region Feedback region containing the changed answer.
+     */
+    const resetRegion = region => {
+        if (region.matches(localTriggerSelector)) {
+            discardTrigger(region);
+        }
+        region.querySelectorAll(localTriggerSelector).forEach(discardTrigger);
+        region.classList.remove(...stateClasses);
+        region.querySelectorAll(localStateSelector).forEach(element => {
+            element.classList.remove('correct', 'incorrect', 'partiallycorrect');
+        });
+        region.querySelectorAll(resultStateSelector).forEach(element => element.remove());
+    };
+
+    /**
+     * Initialise Bootstrap popovers owned by this plugin.
+     */
+    const initialisePopovers = () => {
+        document.querySelectorAll(triggerSelector).forEach(trigger => {
+            Bootstrap.Popover.getOrCreateInstance(trigger);
+        });
     };
 
     /**
      * Initialise event-delegated popover coordination.
      */
     const init = () => {
+        initialisePopovers();
         if (initialised) {
             return;
         }
         initialised = true;
 
         document.addEventListener('hide.bs.popover', preventPinnedHide, true);
-        document.addEventListener('shown.bs.popover', popoverShown, true);
         document.addEventListener('hidden.bs.popover', popoverHidden, true);
 
         document.addEventListener('focusin', event => {
@@ -161,6 +214,27 @@ define(['bootstrap'], function(Bootstrap) {
                 return;
             }
             close(transientTrigger, true);
+        });
+
+        document.addEventListener('input', event => {
+            if (!event.target.matches(`${triggerSelector}.form-control`)) {
+                return;
+            }
+            const region = event.target.closest(feedbackRegionSelector);
+            if (region) {
+                resetRegion(region);
+            }
+        });
+
+        document.addEventListener('change', event => {
+            const changedsurface = event.target.matches('select, input[type="radio"], input[type="checkbox"]');
+            if (!changedsurface && !event.target.matches(clearSentinelSelector)) {
+                return;
+            }
+            const region = event.target.closest(feedbackRegionSelector);
+            if (region && (region.matches(localTriggerSelector) || region.querySelector(localTriggerSelector))) {
+                resetRegion(region);
+            }
         });
 
         document.addEventListener('keydown', event => {
