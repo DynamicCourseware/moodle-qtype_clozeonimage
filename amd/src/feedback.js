@@ -176,6 +176,16 @@ define(['bootstrap'], function(Bootstrap) {
         document.addEventListener('hide.bs.popover', preventPinnedHide, true);
         document.addEventListener('hidden.bs.popover', popoverHidden, true);
 
+        document.addEventListener('mousedown', event => {
+            // Readonly text inputs can match :focus-visible even when clicked. Keep keyboard focus
+            // available, but do not focus an Interactive result with the mouse before Try again.
+            if (event.button === 0 && event.target.matches(
+                '.que.clozeonimage input[readonly][data-clozeonimage-awaiting-retry="true"]'
+            )) {
+                event.preventDefault();
+            }
+        });
+
         document.addEventListener('focusin', event => {
             const trigger = event.target.closest(triggerSelector);
             if (trigger) {

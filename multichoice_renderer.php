@@ -176,7 +176,12 @@ class qtype_clozeonimage_multichoice_renderer extends qtype_multianswer_subq_ren
                 'data-action' => 'clozeonimage-clear-choice',
                 'title' => $clearlabel,
             ];
-            if (!$answered || $feedbackpopup !== '') {
+            // A retained correct answer starts the new try untouched. The existing change handler
+            // reveals Clear when the student actually selects a different answer.
+            $retainedcorrect = $qa->get_behaviour() instanceof qbehaviour_interactive &&
+                $qa->get_last_step()->has_behaviour_var('tryagain') && $answered &&
+                question_state::graded_state_for_fraction($fraction) === question_state::$gradedright;
+            if (!$answered || $feedbackpopup !== '' || $retainedcorrect) {
                 $buttonattributes['hidden'] = 'hidden';
             }
             $result .= html_writer::tag(

@@ -1123,6 +1123,70 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
     }
 
     /**
+     * Text responses whose graded result remains focusable while Try again is pending.
+     *
+     * @return array<string, array{string,string}>
+     */
+    public static function interactive_text_focus_provider(): array {
+        return [
+            'correct Short Answer' => ['shortanswer', 'frog'],
+            'incorrect Short Answer' => ['shortanswer', 'wrong'],
+            'correct Numerical' => ['numerical', '3.14'],
+            'incorrect Numerical' => ['numerical', '999'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('interactive_text_focus_provider')]
+    public function test_interactive_text_focus_lifecycle(string $subquestiontype, string $response): void {
+        $question = $this->make_question(\qtype_clozeonimage::CONTROL_APPEARANCE_TRANSLUCENT, $subquestiontype);
+        $this->add_second_multichoice_subquestion($question);
+        $question->subquestions[2]->shuffleanswers = false;
+        $question->hints = [new \question_hint_with_parts(1, 'Hint', FORMAT_HTML, false, false)];
+        $this->start_attempt_at_question($question, 'interactive', 1);
+        $this->process_submission(['sub1_answer' => $response, 'sub2_answer' => 1, '-submit' => 1]);
+        $this->assertSame('interactivecountback', $this->get_question_attempt()->get_behaviour_name());
+
+        $options = $this->adjusted_display_options();
+        $this->assertSame(\qbehaviour_interactive::TRY_AGAIN_VISIBLE, $options->readonly);
+        $this->assertFalse((bool) $options->correctness);
+        $this->assertTrue((bool) $options->feedback);
+        $this->assertFalse((bool) $options->rightanswer);
+        $this->assertSame(\question_display_options::MARK_AND_MAX, $options->marks);
+
+        $this->render();
+        $xpath = $this->xpath($this->currentoutput);
+        $inputs = $xpath->query('//input[@type="text"]');
+        $this->assertCount(1, $inputs);
+        $input = $inputs->item(0);
+        $this->assertTrue($input->hasAttribute('readonly'));
+        $this->assertFalse($input->hasAttribute('disabled'));
+        $this->assertFalse($input->hasAttribute('tabindex'));
+        $this->assertSame($response, $input->getAttribute('value'));
+        $this->assertSame('true', $input->getAttribute('data-clozeonimage-awaiting-retry'));
+        $this->assertSame('form-control d-inline mb-1 qtype-clozeonimage-feedback-trigger', $input->getAttribute('class'));
+        $this->assertSame('subquestion qtype-clozeonimage-feedback-region', $input->parentNode->getAttribute('class'));
+        $this->assertSame('popover', $input->getAttribute('data-bs-toggle'));
+        $this->assertSame('hover focus', $input->getAttribute('data-bs-trigger'));
+        $this->assertNotSame('', $input->getAttribute('data-bs-content'));
+
+        $this->process_submission(['-tryagain' => 1]);
+        $this->assertFalse($this->adjusted_display_options()->readonly);
+        $this->render();
+        $xpath = $this->xpath($this->currentoutput);
+        $input = $xpath->query('//input[@type="text"]')->item(0);
+        $this->assertFalse($input->hasAttribute('readonly'));
+        $this->assertFalse($input->hasAttribute('disabled'));
+        $this->assertFalse($input->hasAttribute('data-clozeonimage-awaiting-retry'));
+        $this->assert_no_feedback_trigger_markup($xpath);
+
+        $this->finish();
+        $this->render();
+        $input = $this->xpath($this->currentoutput)->query('//input[@type="text"]')->item(0);
+        $this->assertTrue($input->hasAttribute('readonly'));
+        $this->assertFalse($input->hasAttribute('data-clozeonimage-awaiting-retry'));
+    }
+
+    /**
      * Choice renderers and responses used to exercise the complete Interactive lifecycle.
      *
      * @return array<string, array{string,array<string,int>,array<string,int>,string,int}>
@@ -1220,6 +1284,12 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
         $question->hints = [new \question_hint_with_parts(1, 'Hint', FORMAT_HTML, false, true)];
         $this->start_attempt_at_question($question, 'interactive', 1);
 
+        // A saved selection during the first try follows the normal Clear editing rule.
+        $this->process_submission(['sub1_answer' => 0, 'sub2_answer' => 1]);
+        $this->render();
+        $xpath = $this->xpath($this->currentoutput);
+        $this->assertCount(2, $xpath->query('//button[@data-action="clozeonimage-clear-choice" and not(@hidden)]'));
+
         $this->process_submission([
             'sub1_answer' => 0,
             'sub2_answer' => 1,
@@ -1229,6 +1299,10 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
             \qbehaviour_interactive::TRY_AGAIN_VISIBLE,
             $this->adjusted_display_options()->readonly
         );
+        $this->render();
+        $xpath = $this->xpath($this->currentoutput);
+        $this->assertCount(0, $xpath->query('//button[@data-action="clozeonimage-clear-choice"]'));
+        $this->assertCount(6, $xpath->query('//input[@data-role="clozeonimage-multichoice-choice" and @disabled]'));
 
         $this->process_submission([
             'sub1_answer' => 0,
@@ -1245,8 +1319,17 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
         ));
         $buttons = $xpath->query('//button[@data-action="clozeonimage-clear-choice"]');
         $this->assertCount(2, $buttons);
-        $this->assertFalse($buttons->item(0)->hasAttribute('hidden'));
+        $this->assertTrue($buttons->item(0)->hasAttribute('hidden'));
         $this->assertTrue($buttons->item(1)->hasAttribute('hidden'));
+        $this->assertCount(1, $xpath->query('//input[@data-role="clozeonimage-multichoice-choice" and @checked and @value="0"]'));
+        $this->assertTrue($this->get_question_attempt()->get_last_step()->has_behaviour_var('tryagain'));
+
+        // Saving genuinely changed choices keeps both Clear controls eligible after rendering.
+        $this->process_submission(['sub1_answer' => 2, 'sub2_answer' => 2]);
+        $this->render();
+        $xpath = $this->xpath($this->currentoutput);
+        $this->assertCount(2, $xpath->query('//button[@data-action="clozeonimage-clear-choice" and not(@hidden)]'));
+        $this->assertCount(2, $xpath->query('//input[@data-role="clozeonimage-multichoice-choice" and @checked and @value="2"]'));
     }
 
     public function test_interactive_clearwrong_preserves_unanswered_multichoice_through_actual_post(): void {
@@ -1285,8 +1368,9 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
         $correctname = $prefix . 'sub1_answer';
         $this->assertCount(1, $xpath->query(
             '//input[@data-role="clozeonimage-multichoice-choice" and @name="' . $correctname .
-                '" and @value="2" and @checked]'
+                '" and @value="2" and @checked and not(@disabled)]'
         ));
+        $this->assertCount(3, $xpath->query('//button[@data-action="clozeonimage-clear-choice" and @hidden]'));
 
         foreach ([2, 3] as $index) {
             $inputname = $prefix . 'sub' . $index . '_answer';
