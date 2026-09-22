@@ -272,6 +272,23 @@ test('editable choice panels and Clear retain their pre-pass focus presentation'
 });
 
 for (const directory of ['src', 'build']) {
+    test(`${directory}: feedback declares the Moodle 5.2-compatible Bootstrap dependency`, () => {
+        const dom = new JSDOM('', {runScripts: 'outside-only'});
+        try {
+            let dependencies;
+            // Source uses anonymous define; the built module also includes its module name.
+            dom.window.define = (...args) => {
+                dependencies = Array.from(args.at(-2));
+            };
+            const filename = directory === 'build' ? 'feedback.min.js' : 'feedback.js';
+            runInContext(readFileSync(path.join(__dirname, '..', 'amd', directory, filename), 'utf8'),
+                dom.getInternalVMContext());
+            assert.deepEqual(dependencies, ['theme_boost/index']);
+        } finally {
+            dom.window.close();
+        }
+    });
+
     test(`${directory}: unanswered radio structure and native-style selection events keep sentinel outside navigation`, () => {
         const {dom, document, window} = setup(radios(-1, true) +
             '<button type="button" id="outside">Outside</button>', directory);

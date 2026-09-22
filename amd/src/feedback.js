@@ -20,7 +20,7 @@
  * @copyright  2026 DynamicCourseware.org (Dominique Bauer)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-define(['bootstrap'], function(Bootstrap) {
+define(['theme_boost/index'], function(Bootstrap) {
 
     'use strict';
 
