@@ -105,6 +105,23 @@ class qtype_clozeonimage_multichoice_renderer extends qtype_multianswer_subq_ren
         $legend = $this->get_answer_label('multichoicex', 'qtype_multianswer');
         $legend .= $this->result_state_text($statustext);
         $result = $this->choices_wrapper_start($legend);
+        if (!$options->readonly) {
+            $clearid = $inputname . '-clear';
+            $clearlabel = get_string('clearchoiceforsubquestion', 'qtype_clozeonimage', $index);
+            // Keep the unanswered value out of the native radio group and its keyboard navigation.
+            // Place it before the choices so a visible answer also wins in a non-JavaScript POST.
+            $clearattributes = [
+                'type' => 'hidden',
+                'name' => $inputname,
+                'id' => $clearid,
+                'value' => -1,
+                'data-role' => 'clozeonimage-clear-choice-sentinel',
+            ];
+            if ($answered) {
+                $clearattributes['disabled'] = 'disabled';
+            }
+            $result .= html_writer::empty_tag('input', $clearattributes);
+        }
         foreach ($order as $value => $ansid) {
             $answer = $subq->answers[$ansid];
             $inputattributes['value'] = $value;
@@ -117,7 +134,7 @@ class qtype_clozeonimage_multichoice_renderer extends qtype_multianswer_subq_ren
             }
 
             $class = 'form-check text-wrap text-break qtype-clozeonimage-choice';
-            if ($options->correctness && $isselected) {
+            if ($stateclass !== '' && $isselected) {
                 $class .= ' ' . $this->feedback_class($answer->fraction);
             }
             if ($horizontal) {
@@ -134,7 +151,7 @@ class qtype_clozeonimage_multichoice_renderer extends qtype_multianswer_subq_ren
                 'answer',
                 $ansid
             );
-            if ($options->correctness && $isselected) {
+            if ($stateclass !== '' && $isselected) {
                 $choicelabel .= $this->result_state_text(
                     question_state::graded_state_for_fraction($answer->fraction)->default_string(true)
                 );
@@ -147,25 +164,6 @@ class qtype_clozeonimage_multichoice_renderer extends qtype_multianswer_subq_ren
             $result .= html_writer::span($control, 'qtype-clozeonimage-choice-control');
             $result .= html_writer::end_tag('div');
         }
-        if (!$options->readonly) {
-            $clearid = $inputname . '-clear';
-            $clearlabel = get_string('clearchoiceforsubquestion', 'qtype_clozeonimage', $index);
-            $clearattributes = [
-                'type' => 'radio',
-                'name' => $inputname,
-                'id' => $clearid,
-                'value' => -1,
-                'class' => 'visually-hidden qtype-clozeonimage-clear-choice-sentinel',
-                'data-role' => 'clozeonimage-clear-choice-sentinel',
-                'aria-hidden' => 'true',
-            ];
-            if ($answered) {
-                $clearattributes['disabled'] = 'disabled';
-            } else {
-                $clearattributes['checked'] = 'checked';
-            }
-            $result .= html_writer::empty_tag('input', $clearattributes);
-        }
         $result .= $this->choices_wrapper_end();
         if ($options->readonly) {
             $result .= $this->feedback_surface_button($feedbackpopup, (int) $index, $statustext);
@@ -175,15 +173,8 @@ class qtype_clozeonimage_multichoice_renderer extends qtype_multianswer_subq_ren
                 'class' => 'qtype-clozeonimage-clear-choice',
                 'data-action' => 'clozeonimage-clear-choice',
                 'title' => $clearlabel,
+                'hidden' => 'hidden',
             ];
-            // A retained correct answer starts the new try untouched. The existing change handler
-            // reveals Clear when the student actually selects a different answer.
-            $retainedcorrect = $qa->get_behaviour() instanceof qbehaviour_interactive &&
-                $qa->get_last_step()->has_behaviour_var('tryagain') && $answered &&
-                question_state::graded_state_for_fraction($fraction) === question_state::$gradedright;
-            if (!$answered || $feedbackpopup !== '' || $retainedcorrect) {
-                $buttonattributes['hidden'] = 'hidden';
-            }
             $result .= html_writer::tag(
                 'button',
                 html_writer::span('C', '', ['aria-hidden' => 'true']) .

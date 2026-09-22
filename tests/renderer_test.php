@@ -210,6 +210,26 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
     }
 
     /**
+     * Assert that neither controls, accessible labels, nor local popovers disclose generated correctness.
+     *
+     * @param \DOMXPath $xpath Rendered question.
+     */
+    private function assert_no_semantic_result(\DOMXPath $xpath): void {
+        $this->assertCount(0, $xpath->query('//*[contains(@class, "qtype-clozeonimage-state-")]'));
+        $this->assertCount(0, $xpath->query('//*[@data-role="clozeonimage-result-state"]'));
+        foreach (['correct', 'partiallycorrect', 'incorrect'] as $state) {
+            $this->assertCount(0, $xpath->query(
+                '//*[contains(@class, "qtype-clozeonimage-feedback-region")]' .
+                '/descendant-or-self::*[contains(concat(" ", normalize-space(@class), " "), " ' . $state . ' ")]'
+            ));
+        }
+        foreach ($xpath->query('//*[@data-bs-content and contains(@class, "qtype-clozeonimage-")]') as $trigger) {
+            $popup = $this->xpath($trigger->getAttribute('data-bs-content'));
+            $this->assertCount(0, $popup->query('//*[@data-clozeonimage-result-state]'));
+        }
+    }
+
+    /**
      * Assert that popup contents use the uniform section structure.
      *
      * @param string $feedback Popup HTML.
@@ -472,13 +492,14 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
         ];
     }
 
-    #[\PHPUnit\Framework\Attributes\DataProvider('clear_choice_layout_provider')]
+    #[\PHPUnit\Framework\Attributes\DataProvider('editable_clear_provider')]
     public function test_editable_multichoice_unanswered_has_local_clear_sentinel(
-        string $subquestiontype
+        string $subquestiontype,
+        string $behaviour
     ): void {
         $this->start_attempt_at_question(
             $this->make_question(\qtype_clozeonimage::CONTROL_APPEARANCE_TRANSLUCENT, $subquestiontype),
-            'deferredfeedback',
+            $behaviour,
             1
         );
 
@@ -498,8 +519,17 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
         $button = $buttons->item(0);
         $this->assertSame($choices->item(0)->getAttribute('name'), $sentinel->getAttribute('name'));
         $this->assertSame('-1', $sentinel->getAttribute('value'));
-        $this->assertTrue($sentinel->hasAttribute('checked'));
+        $this->assertSame('hidden', $sentinel->getAttribute('type'));
+        $this->assertFalse($sentinel->hasAttribute('checked'));
+        $this->assertFalse($sentinel->hasAttribute('tabindex'));
         $this->assertFalse($sentinel->hasAttribute('disabled'));
+        $this->assertCount(3, $xpath->query('.//input[@type="radio"]', $region));
+        foreach ($choices as $choice) {
+            $this->assertSame('radio', $choice->getAttribute('type'));
+            $this->assertFalse($choice->hasAttribute('checked'));
+            $this->assertFalse($choice->hasAttribute('disabled'));
+            $this->assertFalse($choice->hasAttribute('tabindex'));
+        }
         $this->assertSame('button', $button->getAttribute('type'));
         $this->assertTrue($button->hasAttribute('hidden'));
         $this->assertSame(
@@ -513,13 +543,29 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
         $this->assertCount(1, $xpath->query('.//span[@aria-hidden="true" and text()="C"]', $button));
     }
 
-    #[\PHPUnit\Framework\Attributes\DataProvider('clear_choice_layout_provider')]
-    public function test_selected_editable_multichoice_has_available_local_clear_button(
-        string $subquestiontype
+    /**
+     * Editable radio layouts use the same initial focus rule across behaviours.
+     *
+     * @return array<string, array{string,string}>
+     */
+    public static function editable_clear_provider(): array {
+        $cases = [];
+        foreach (['interactive', 'adaptive', 'adaptivenopenalty', 'immediatefeedback', 'deferredfeedback'] as $behaviour) {
+            foreach (self::clear_choice_layout_provider() as $name => [$type]) {
+                $cases[$behaviour . ' ' . $name] = [$type, $behaviour];
+            }
+        }
+        return $cases;
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('editable_clear_provider')]
+    public function test_selected_editable_multichoice_starts_with_clear_hidden_until_focus(
+        string $subquestiontype,
+        string $behaviour
     ): void {
         $this->start_attempt_at_question(
             $this->make_question(\qtype_clozeonimage::CONTROL_APPEARANCE_TRANSLUCENT, $subquestiontype),
-            'deferredfeedback',
+            $behaviour,
             1
         );
         $this->process_submission(['sub1_answer' => '1']);
@@ -531,9 +577,68 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
 
         $this->assertNotNull($sentinel);
         $this->assertNotNull($button);
+        $this->assertSame('hidden', $sentinel->getAttribute('type'));
+        $this->assertFalse($sentinel->hasAttribute('tabindex'));
         $this->assertFalse($sentinel->hasAttribute('checked'));
         $this->assertTrue($sentinel->hasAttribute('disabled'));
-        $this->assertFalse($button->hasAttribute('hidden'));
+        $this->assertTrue($button->hasAttribute('hidden'));
+        $this->assertCount(1, $xpath->query(
+            '//input[@data-role="clozeonimage-multichoice-choice" and @checked and not(@disabled)]'
+        ));
+    }
+
+    /**
+     * Exercise the hidden fallback through real Moodle POST processing, including response zero.
+     *
+     * @param string $subquestiontype Radio layout.
+     * @param string $behaviour Editable behaviour.
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('editable_clear_provider')]
+    public function test_clear_sentinel_survives_moodle_integer_post_processing(
+        string $subquestiontype,
+        string $behaviour
+    ): void {
+        $this->start_attempt_at_question(
+            $this->make_question(\qtype_clozeonimage::CONTROL_APPEARANCE_TRANSLUCENT, $subquestiontype),
+            $behaviour,
+            1
+        );
+        $this->process_submission(['sub1_answer' => '1']);
+        $this->assertSame(PARAM_INT, $this->get_question_attempt()->get_question()->get_expected_data()['sub1_answer']);
+        $inputname = $this->quba->get_field_prefix($this->slot) . 'sub1_answer';
+        foreach (['-1', '0', '2', '-1'] as $response) {
+            $this->render();
+            $xpath = $this->xpath($this->currentoutput);
+            $sentinel = $xpath->query('//input[@data-role="clozeonimage-clear-choice-sentinel"]')->item(0);
+            $this->assertSame('hidden', $sentinel->getAttribute('type'));
+            // Mirror Clear/choiceChanged. For zero, also test selection before the AMD module loads:
+            // the enabled fallback precedes the selected radio, so PHP must receive the latter value.
+            if ($response === '2') {
+                $sentinel->setAttribute('disabled', 'disabled');
+            } else {
+                $sentinel->removeAttribute('disabled');
+            }
+            foreach ($xpath->query('//input[@data-role="clozeonimage-multichoice-choice"]') as $choice) {
+                $choice->removeAttribute('checked');
+                if ($choice->getAttribute('value') === $response) {
+                    $choice->setAttribute('checked', 'checked');
+                }
+            }
+            $pairs = ['slots=' . $this->slot];
+            foreach ($xpath->query('//input[@name and not(@disabled)]') as $input) {
+                $type = $input->getAttribute('type');
+                if ($type === 'submit' || ($type === 'radio' && !$input->hasAttribute('checked'))) {
+                    continue;
+                }
+                $pairs[] = urlencode($input->getAttribute('name')) . '=' . urlencode($input->getAttribute('value'));
+            }
+            parse_str(implode('&', $pairs), $post);
+            $this->assertSame($response, $post[$inputname]);
+            $this->quba->process_all_actions(time(), $post);
+            $this->assertSame($response, $this->get_question_attempt()->get_last_qt_var('sub1_answer'));
+            $subquestion = $this->get_question_attempt()->get_question()->subquestions[1];
+            $this->assertSame($response !== '-1', $subquestion->is_complete_response(['answer' => $response]));
+        }
     }
 
     public function test_clear_choice_controls_are_local_to_each_multichoice_subquestion(): void {
@@ -561,7 +666,7 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
             $this->assertCount(1, $buttons);
             $names[] = $sentinels->item(0)->getAttribute('name');
             $ids[] = $sentinels->item(0)->getAttribute('id');
-            $this->assertFalse($buttons->item(0)->hasAttribute('hidden'));
+            $this->assertTrue($buttons->item(0)->hasAttribute('hidden'));
         }
         $this->assertCount(2, array_unique($names));
         $this->assertCount(2, array_unique($ids));
@@ -1052,7 +1157,7 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
         ]), $feedback);
     }
 
-    public function test_feedback_without_correctness_still_has_review_surface_but_no_state(): void {
+    public function test_explanatory_feedback_without_correctness_or_marks_has_no_state(): void {
         $this->start_attempt_at_question(
             $this->make_question(
                 \qtype_clozeonimage::CONTROL_APPEARANCE_TRANSLUCENT,
@@ -1066,13 +1171,15 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
         $this->displayoptions->correctness = false;
         $this->displayoptions->feedback = true;
         $this->displayoptions->rightanswer = false;
-        $this->displayoptions->marks = \question_display_options::MARK_AND_MAX;
+        $this->displayoptions->marks = \question_display_options::MAX_ONLY;
 
         $this->render();
         $xpath = $this->xpath($this->currentoutput);
         $this->assertCount(1, $xpath->query('//button[contains(concat(" ", normalize-space(@class), " "), ' .
             '" qtype-clozeonimage-review-surface ")]'));
         $this->assertCount(0, $xpath->query('//*[contains(@class, "qtype-clozeonimage-state-")]'));
+        $popup = $this->xpath($xpath->query('//*[@data-bs-content]')->item(0)->getAttribute('data-bs-content'));
+        $this->assertCount(0, $popup->query('//*[@data-clozeonimage-result-state]'));
         $this->assertStringNotContainsString(
             \question_state::$gradedwrong->default_string(true),
             $xpath->query('//button[contains(concat(" ", normalize-space(@class), " "), ' .
@@ -1123,6 +1230,63 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
     }
 
     /**
+     * Available mark display modes.
+     *
+     * @return array<string, array{int}>
+     */
+    public static function marks_mode_provider(): array {
+        return ['hidden' => [0], 'maximum only' => [1], 'earned and maximum' => [2]];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('marks_mode_provider')]
+    public function test_interactive_marks_do_not_disclose_retained_answer_during_editing(int $marks): void {
+        $question = $this->make_question();
+        $this->add_second_multichoice_subquestion($question);
+        $question->subquestions[2]->shuffleanswers = false;
+        $question->hints = [new \question_hint_with_parts(1, 'Hint', FORMAT_HTML, false, false)];
+        $this->start_attempt_at_question($question, 'interactive', 1);
+        $this->displayoptions->marks = $marks;
+        $this->displayoptions->correctness = true;
+        $this->displayoptions->feedback = false;
+        $this->displayoptions->rightanswer = false;
+        foreach (['initial', 'checked', 'tryagain', 'exhausted', 'review'] as $stage) {
+            if ($stage === 'checked' || $stage === 'exhausted') {
+                $this->process_submission(['sub1_answer' => 'frog', 'sub2_answer' => 1, '-submit' => 1]);
+            } else if ($stage === 'tryagain') {
+                $this->process_submission(['-tryagain' => 1]);
+                $this->assertSame('frog', $this->get_question_attempt()->get_last_qt_var('sub1_answer'));
+            } else if ($stage === 'review') {
+                $this->finish();
+                $this->displayoptions->readonly = true;
+                $this->displayoptions->correctness = false;
+            }
+            $options = $this->adjusted_display_options();
+            $this->assertSame($stage === 'exhausted', (bool) $options->correctness);
+            if ($stage === 'checked') {
+                $this->assertSame(\qbehaviour_interactive::TRY_AGAIN_VISIBLE, $options->readonly);
+            }
+            $this->render();
+            $xpath = $this->xpath($this->currentoutput);
+            if (!$options->correctness) {
+                $this->assert_no_semantic_result($xpath);
+            }
+            $input = $xpath->query('//input[@type="text"]')->item(0);
+            $popup = $input->getAttribute('data-bs-content');
+            $this->assertSame($marks === \question_display_options::MAX_ONLY, str_contains(
+                $popup,
+                get_string('markedoutofmax', 'question', format_float(1, $options->markdp))
+            ));
+            $currentresult = in_array($stage, ['checked', 'exhausted', 'review']);
+            $this->assertSame($marks === \question_display_options::MARK_AND_MAX && $currentresult, str_contains(
+                $popup,
+                get_string('markoutofmax', 'question', (object) [
+                    'mark' => format_float(1, $options->markdp), 'max' => format_float(1, $options->markdp),
+                ])
+            ));
+        }
+    }
+
+    /**
      * Text responses whose graded result remains focusable while Try again is pending.
      *
      * @return array<string, array{string,string}>
@@ -1163,8 +1327,7 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
         $this->assertFalse($input->hasAttribute('tabindex'));
         $this->assertSame($response, $input->getAttribute('value'));
         $this->assertSame('true', $input->getAttribute('data-clozeonimage-awaiting-retry'));
-        $this->assertSame('form-control d-inline mb-1 qtype-clozeonimage-feedback-trigger', $input->getAttribute('class'));
-        $this->assertSame('subquestion qtype-clozeonimage-feedback-region', $input->parentNode->getAttribute('class'));
+        $this->assert_no_semantic_result($xpath);
         $this->assertSame('popover', $input->getAttribute('data-bs-toggle'));
         $this->assertSame('hover focus', $input->getAttribute('data-bs-trigger'));
         $this->assertNotSame('', $input->getAttribute('data-bs-content'));
@@ -1184,6 +1347,68 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
         $input = $this->xpath($this->currentoutput)->query('//input[@type="text"]')->item(0);
         $this->assertTrue($input->hasAttribute('readonly'));
         $this->assertFalse($input->hasAttribute('data-clozeonimage-awaiting-retry'));
+    }
+
+    /**
+     * Locked text results must use the same focus guard for every independently enabled popup section.
+     *
+     * @return array<string, array{string,string,string,string}>
+     */
+    public static function readonly_result_focus_provider(): array {
+        $cases = [];
+        foreach (['interactive', 'immediatefeedback'] as $behaviour) {
+            foreach (['shortanswer' => 'toad', 'numerical' => '3.14'] as $type => $response) {
+                foreach (['maximum', 'marks', 'feedback', 'rightanswer'] as $option) {
+                    $cases[$behaviour . ' ' . $type . ' ' . $option] = [$behaviour, $type, $response, $option];
+                }
+            }
+        }
+        return $cases;
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('readonly_result_focus_provider')]
+    public function test_readonly_result_retains_keyboard_and_popover_contract(
+        string $behaviour,
+        string $type,
+        string $response,
+        string $option
+    ): void {
+        $question = $this->make_question(\qtype_clozeonimage::CONTROL_APPEARANCE_TRANSLUCENT, $type);
+        $this->add_second_multichoice_subquestion($question);
+        $question->subquestions[2]->shuffleanswers = false;
+        $question->hints = [new \question_hint_with_parts(1, 'Hint', FORMAT_HTML, false, false)];
+        $this->start_attempt_at_question($question, $behaviour, 1);
+        $submission = ['sub1_answer' => $response, 'sub2_answer' => 1, '-submit' => 1];
+        $this->process_submission($submission);
+        if ($behaviour === 'interactive') {
+            $this->assertSame(\qbehaviour_interactive::TRY_AGAIN_VISIBLE, $this->adjusted_display_options()->readonly);
+            $this->process_submission(['-tryagain' => 1]);
+            $this->process_submission($submission);
+        }
+        $this->assertTrue($this->get_question_attempt()->get_state()->is_finished());
+        $this->displayoptions->correctness = false;
+        $this->displayoptions->marks = match ($option) {
+            'maximum' => \question_display_options::MAX_ONLY,
+            'marks' => \question_display_options::MARK_AND_MAX,
+            default => \question_display_options::HIDDEN,
+        };
+        $this->displayoptions->feedback = $option === 'feedback';
+        $this->displayoptions->rightanswer = $option === 'rightanswer';
+        $this->assertTrue((bool) $this->adjusted_display_options()->readonly);
+        $this->render();
+        $xpath = $this->xpath($this->currentoutput);
+        $input = $xpath->query('//input[@type="text"]')->item(0);
+        $this->assertTrue($input->hasAttribute('readonly'));
+        $this->assertFalse($input->hasAttribute('disabled'));
+        $this->assertFalse($input->hasAttribute('tabindex'));
+        $this->assertFalse($input->hasAttribute('data-clozeonimage-awaiting-retry'));
+        $this->assertStringContainsString('form-control', $input->getAttribute('class'));
+        $this->assertStringContainsString('qtype-clozeonimage-feedback-region', $input->parentNode->getAttribute('class'));
+        $this->assertSame($response, $input->getAttribute('value'));
+        $this->assertSame('popover', $input->getAttribute('data-bs-toggle'));
+        $this->assertSame('hover focus', $input->getAttribute('data-bs-trigger'));
+        $this->assertNotSame('', $input->getAttribute('data-bs-content'));
+        $this->assert_no_semantic_result($xpath);
     }
 
     /**
@@ -1284,11 +1509,11 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
         $question->hints = [new \question_hint_with_parts(1, 'Hint', FORMAT_HTML, false, true)];
         $this->start_attempt_at_question($question, 'interactive', 1);
 
-        // A saved selection during the first try follows the normal Clear editing rule.
+        // Server-rendered selections start without focus and therefore with Clear hidden.
         $this->process_submission(['sub1_answer' => 0, 'sub2_answer' => 1]);
         $this->render();
         $xpath = $this->xpath($this->currentoutput);
-        $this->assertCount(2, $xpath->query('//button[@data-action="clozeonimage-clear-choice" and not(@hidden)]'));
+        $this->assertCount(2, $xpath->query('//button[@data-action="clozeonimage-clear-choice" and @hidden]'));
 
         $this->process_submission([
             'sub1_answer' => 0,
@@ -1324,11 +1549,11 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
         $this->assertCount(1, $xpath->query('//input[@data-role="clozeonimage-multichoice-choice" and @checked and @value="0"]'));
         $this->assertTrue($this->get_question_attempt()->get_last_step()->has_behaviour_var('tryagain'));
 
-        // Saving genuinely changed choices keeps both Clear controls eligible after rendering.
+        // A changed saved response also waits for focus after rendering.
         $this->process_submission(['sub1_answer' => 2, 'sub2_answer' => 2]);
         $this->render();
         $xpath = $this->xpath($this->currentoutput);
-        $this->assertCount(2, $xpath->query('//button[@data-action="clozeonimage-clear-choice" and not(@hidden)]'));
+        $this->assertCount(2, $xpath->query('//button[@data-action="clozeonimage-clear-choice" and @hidden]'));
         $this->assertCount(2, $xpath->query('//input[@data-role="clozeonimage-multichoice-choice" and @checked and @value="2"]'));
     }
 
@@ -1383,7 +1608,9 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
             );
             $this->assertCount(1, $sentinels);
             $this->assertSame('-1', $sentinels->item(0)->getAttribute('value'));
-            $this->assertTrue($sentinels->item(0)->hasAttribute('checked'));
+            $this->assertSame('hidden', $sentinels->item(0)->getAttribute('type'));
+            $this->assertFalse($sentinels->item(0)->hasAttribute('checked'));
+            $this->assertFalse($sentinels->item(0)->hasAttribute('tabindex'));
             $this->assertFalse($sentinels->item(0)->hasAttribute('disabled'));
 
             $buttons = $xpath->query(
@@ -1413,7 +1640,7 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
             'mark' => '1.00',
             'max' => '1.00',
         ]), $feedback);
-        $this->assertStringNotContainsString(\question_state::$gradedright->default_string(true), $feedback);
+        $this->assert_no_semantic_result($xpath);
     }
 
     /**
@@ -1616,13 +1843,23 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
         }
     }
 
-    public function test_adaptive_checked_multichoice_hides_clear_until_response_changes(): void {
+    /**
+     * Adaptive behaviours sharing focus-based Clear interactions.
+     *
+     * @return array<string, array{string}>
+     */
+    public static function adaptive_behaviour_provider(): array {
+        return ['adaptive' => ['adaptive'], 'no penalties' => ['adaptivenopenalty']];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('adaptive_behaviour_provider')]
+    public function test_adaptive_checked_multichoice_waits_for_focus_to_show_clear(string $behaviour): void {
         $this->start_attempt_at_question(
             $this->make_question(
                 \qtype_clozeonimage::CONTROL_APPEARANCE_TRANSLUCENT,
                 'multichoice_vertical'
             ),
-            'adaptive',
+            $behaviour,
             1
         );
         $this->process_submission(['sub1_answer' => 1, '-submit' => 1]);
@@ -1642,6 +1879,8 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
         $clearbuttons = $xpath->query('//button[@data-action="clozeonimage-clear-choice"]');
         $this->assertCount(1, $clearbuttons);
         $this->assertTrue($clearbuttons->item(0)->hasAttribute('hidden'));
+        $this->assertCount(1, $xpath->query('//*[@data-region="clozeonimage-multichoice" and ' .
+            'contains(@class, "qtype-clozeonimage-state-incorrect")]'));
 
         $this->process_submission(['sub1_answer' => 2]);
         $this->displayoptions->correctness = false;
@@ -1654,7 +1893,256 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
         ));
         $clearbuttons = $xpath->query('//button[@data-action="clozeonimage-clear-choice"]');
         $this->assertCount(1, $clearbuttons);
-        $this->assertFalse($clearbuttons->item(0)->hasAttribute('hidden'));
+        $this->assertTrue($clearbuttons->item(0)->hasAttribute('hidden'));
+
+        $this->process_submission(['sub1_answer' => 0, '-submit' => 1]);
+        $this->displayoptions->correctness = true;
+        $this->displayoptions->feedback = true;
+        $this->render();
+        $xpath = $this->xpath($this->currentoutput);
+        $this->assertCount(1, $xpath->query('//*[@data-region="clozeonimage-multichoice" and ' .
+            'contains(@class, "qtype-clozeonimage-state-correct")]'));
+        $this->assertCount(1, $xpath->query('//button[@data-action="clozeonimage-clear-choice" and @hidden]'));
+        $this->assertCount(1, $xpath->query('//input[@data-role="clozeonimage-multichoice-choice" and @checked and @value="0"]'));
+    }
+
+    /**
+     * Local results across the behaviours that expose graded popovers.
+     *
+     * @return array<string, array{string,string,string,array<string,int|string>}>
+     */
+    public static function unified_result_provider(): array {
+        $responses = [
+            'shortanswer' => ['correct' => ['sub1_answer' => 'frog'],
+                'partiallycorrect' => ['sub1_answer' => 'toad'], 'incorrect' => ['sub1_answer' => 'wrong']],
+            'numerical' => ['correct' => ['sub1_answer' => '3.14'],
+                'partiallycorrect' => ['sub1_answer' => '3.1'], 'incorrect' => ['sub1_answer' => '999']],
+            'multichoice' => ['correct' => ['sub1_answer' => 0],
+                'partiallycorrect' => ['sub1_answer' => 1], 'incorrect' => ['sub1_answer' => 2]],
+            'multichoice_vertical' => ['correct' => ['sub1_answer' => 0],
+                'partiallycorrect' => ['sub1_answer' => 1], 'incorrect' => ['sub1_answer' => 2]],
+            'multiresponse_horizontal' => ['correct' => ['sub1_choice0' => 1, 'sub1_choice2' => 1],
+                'partiallycorrect' => ['sub1_choice0' => 1], 'incorrect' => ['sub1_choice1' => 1]],
+        ];
+        $cases = [];
+        foreach (
+            ['interactive', 'adaptive', 'adaptivenopenalty', 'immediatefeedback',
+                'deferredfeedback', 'immediatecbm', 'deferredcbm'] as $behaviour
+        ) {
+            foreach ($responses as $type => $states) {
+                foreach ($states as $state => $response) {
+                    $cases[$behaviour . ' ' . $type . ' ' . $state] = [$behaviour, $type, $state, $response];
+                }
+            }
+        }
+        return $cases;
+    }
+
+    /**
+     * Independent option combinations for every control family and every supported behaviour.
+     *
+     * @return array<string, array{string,string,string,array,bool,int,bool,bool}>
+     */
+    public static function independent_review_options_provider(): array {
+        $cases = [];
+        foreach (self::unified_result_provider() as $name => [$behaviour, $type, $state, $response]) {
+            if ($state !== 'partiallycorrect' || ($behaviour !== 'deferredfeedback' && $type !== 'shortanswer')) {
+                continue;
+            }
+            foreach ([false, true] as $correctness) {
+                foreach ([0, 1, 2] as $marks) {
+                    foreach ([false, true] as $feedback) {
+                        foreach ([false, true] as $rightanswer) {
+                            $key = $name . ' ' . (int) $correctness . $marks . (int) $feedback . (int) $rightanswer;
+                            $cases[$key] = [$behaviour, $type, $state, $response,
+                                $correctness, $marks, $feedback, $rightanswer];
+                        }
+                    }
+                }
+            }
+        }
+        return $cases;
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('independent_review_options_provider')]
+    public function test_independent_effective_review_options(
+        string $behaviour,
+        string $type,
+        string $state,
+        array $response,
+        bool $correctness,
+        int $marks,
+        bool $feedback,
+        bool $rightanswer
+    ): void {
+        $question = $this->make_question(\qtype_clozeonimage::CONTROL_APPEARANCE_TRANSLUCENT, $type);
+        $subq = $question->subquestions[1];
+        if (str_starts_with($type, 'multichoice')) {
+            $subq->answers[14]->fraction = 0.5;
+        } else if ($type === 'numerical') {
+            $subq->answers[15]->fraction = 0.5;
+        }
+        $subq->defaultmark = 2.5;
+        foreach ($subq->answers as $answer) {
+            $answer->feedback = 'Selected response explanation';
+        }
+        $question->generalfeedback = 'Whole question explanation';
+        $question->hints = [new \question_hint_with_parts(1, 'Hint', FORMAT_HTML, false, false)];
+        $this->start_attempt_at_question($question, $behaviour, 2.5);
+        $submission = $response;
+        if (str_contains($behaviour, 'cbm')) {
+            $submission['-certainty'] = 2;
+        }
+        if (!str_starts_with($behaviour, 'deferred')) {
+            $submission['-submit'] = 1;
+        }
+        $this->process_submission($submission);
+        if (str_starts_with($behaviour, 'deferred')) {
+            $this->finish();
+        }
+        $this->displayoptions->correctness = $correctness;
+        $this->displayoptions->marks = $marks;
+        $this->displayoptions->feedback = $feedback;
+        $this->displayoptions->rightanswer = $rightanswer;
+        $this->displayoptions->generalfeedback = true;
+        $this->displayoptions->markdp = 3;
+        $options = $this->adjusted_display_options();
+        $this->render();
+        $xpath = $this->xpath($this->currentoutput);
+        if ($options->correctness) {
+            $this->assert_current_result($state);
+        } else {
+            $this->assert_no_semantic_result($xpath);
+        }
+        $triggers = $xpath->query('//*[@data-bs-content and contains(@class, "qtype-clozeonimage-")]');
+        $sectioncount = (int) (bool) $options->correctness + (int) (bool) $options->feedback +
+            (int) (bool) $options->rightanswer + (int) ($options->marks !== 0);
+        $this->assertCount($sectioncount ? 1 : 0, $triggers);
+        $popuphtml = $sectioncount ? $triggers->item(0)->getAttribute('data-bs-content') : '';
+        $this->assertSame((bool) $options->feedback, str_contains($popuphtml, 'Selected response explanation'));
+        $this->assertSame((bool) $options->rightanswer, str_contains(
+            $popuphtml,
+            get_string('correctansweris', 'qtype_shortanswer', '')
+        ));
+        $this->assertStringNotContainsString('Whole question explanation', $popuphtml);
+        $this->assertSame((bool) $options->generalfeedback, str_contains($this->currentoutput, 'Whole question explanation'));
+        $maxtext = get_string('markedoutofmax', 'question', format_float(2.5, 3));
+        $fraction = $type === 'shortanswer' ? 0.8 : 0.5;
+        $marktext = get_string('markoutofmax', 'question', (object) [
+            'mark' => format_float($fraction * 2.5, 3), 'max' => format_float(2.5, 3),
+        ]);
+        $this->assertSame($marks === \question_display_options::MAX_ONLY, str_contains($popuphtml, $maxtext));
+        $this->assertSame($marks === \question_display_options::MARK_AND_MAX, str_contains($popuphtml, $marktext));
+        if ($sectioncount) {
+            $popup = $this->xpath($popuphtml);
+            $this->assertCount($sectioncount, $popup->query('//*[contains(@class, "qtype-clozeonimage-feedback-section")]'));
+        }
+    }
+
+    /**
+     * Assert that the first subquestion's popup, outline hook, and accessible status agree.
+     *
+     * @param string $state Expected local grade state.
+     */
+    private function assert_current_result(string $state): void {
+        $xpath = $this->xpath($this->currentoutput);
+        $region = $xpath->query('//*[contains(concat(" ", normalize-space(@class), " "), ' .
+            '" qtype-clozeonimage-feedback-region ")]')->item(0);
+        $this->assertNotNull($region);
+        $this->assertStringContainsString('qtype-clozeonimage-state-' . $state, $region->getAttribute('class'));
+        $triggers = $xpath->query('descendant-or-self::*[@data-bs-toggle="popover"]', $region);
+        $this->assertCount(1, $triggers);
+        $popup = $this->xpath($triggers->item(0)->getAttribute('data-bs-content'));
+        $states = $popup->query('//*[@data-clozeonimage-result-state]');
+        $this->assertCount(1, $states);
+        $this->assertSame($state, $states->item(0)->getAttribute('data-clozeonimage-result-state'));
+        $this->assertGreaterThan(0, $xpath->query('.//*[@data-role="clozeonimage-result-state"]', $region)->length);
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('unified_result_provider')]
+    public function test_unified_result_across_behaviours(
+        string $behaviour,
+        string $type,
+        string $state,
+        array $response
+    ): void {
+        $question = $this->make_question(\qtype_clozeonimage::CONTROL_APPEARANCE_TRANSLUCENT, $type);
+        if (str_starts_with($type, 'multichoice')) {
+            $question->subquestions[1]->answers[14]->fraction = 0.5;
+        } else if ($type === 'numerical') {
+            $question->subquestions[1]->answers[15]->fraction = 0.5;
+        }
+        $this->add_second_multichoice_subquestion($question);
+        $question->subquestions[2]->shuffleanswers = false;
+        $question->hints = [new \question_hint_with_parts(1, 'Hint', FORMAT_HTML, false, false)];
+        $this->start_attempt_at_question($question, $behaviour, 1);
+        $this->render();
+        // CBM's native certainty-help popover is ancillary, not a subquestion result.
+        $xpath = $this->xpath($this->currentoutput);
+        $this->assertCount(0, $xpath->query('//*[contains(@class, "qtype-clozeonimage-feedback-trigger")]'));
+        $this->assertCount(0, $xpath->query('//*[contains(@class, "qtype-clozeonimage-state-")]'));
+
+        // Keep the composite incorrect so Interactive offers another try, even for a correct local answer.
+        $submission = $response + ['sub2_answer' => 1];
+        if (str_contains($behaviour, 'cbm')) {
+            $submission['-certainty'] = 2;
+        }
+        if (!str_starts_with($behaviour, 'deferred')) {
+            $submission['-submit'] = 1;
+        }
+        $this->process_submission($submission);
+        if (str_starts_with($behaviour, 'deferred')) {
+            $this->finish();
+        }
+        $this->displayoptions->correctness = true;
+        $this->displayoptions->feedback = true;
+        $this->render();
+        $options = $this->adjusted_display_options();
+        $xpath = $this->xpath($this->currentoutput);
+        if ($options->correctness) {
+            $this->assert_current_result($state);
+        } else {
+            $this->assert_no_semantic_result($xpath);
+        }
+        if ($options->readonly) {
+            $this->assertCount(0, $xpath->query('//button[@data-action="clozeonimage-clear-choice"]'));
+            $this->assertCount(0, $xpath->query('//input[@data-role="clozeonimage-clear-choice-sentinel"]'));
+        }
+        if (in_array($type, ['shortanswer', 'numerical'])) {
+            $input = $xpath->query('//input[@type="text"]')->item(0);
+            $this->assertFalse($input->hasAttribute('disabled'));
+            $this->assertSame((bool) $options->readonly, $input->hasAttribute('readonly'));
+        }
+        if ($behaviour === 'interactive') {
+            $this->assertSame(\qbehaviour_interactive::TRY_AGAIN_VISIBLE, $options->readonly);
+            $this->assertFalse((bool) $options->correctness);
+            $this->assertTrue((bool) $options->feedback);
+            $this->assertFalse((bool) $options->rightanswer);
+            $this->assertCount(1, $xpath->query('//input[contains(@name, "-tryagain") and not(@disabled)]'));
+
+            $this->process_submission(['-tryagain' => 1]);
+            $this->render();
+            $xpath = $this->xpath($this->currentoutput);
+            $this->assert_no_feedback_trigger_markup($xpath);
+            $this->assertCount(0, $xpath->query('//*[contains(@class, "qtype-clozeonimage-state-")]'));
+
+            // Exhaust the final try and verify the same model on locked results.
+            $this->process_submission($submission);
+            $this->assertTrue($this->adjusted_display_options()->readonly);
+            $this->render();
+            $this->assert_current_result($state);
+            $xpath = $this->xpath($this->currentoutput);
+            $this->assertCount(0, $xpath->query('//button[@data-action="clozeonimage-clear-choice"]'));
+
+            $this->finish();
+            $this->displayoptions->readonly = true;
+            $this->displayoptions->correctness = false;
+            $this->render();
+            $this->assert_no_semantic_result($this->xpath($this->currentoutput));
+            $this->displayoptions->correctness = true;
+            $this->render();
+            $this->assert_current_result($state);
+        }
     }
 
     /**

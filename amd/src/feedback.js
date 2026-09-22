@@ -177,16 +177,26 @@ define(['bootstrap'], function(Bootstrap) {
         document.addEventListener('hidden.bs.popover', popoverHidden, true);
 
         document.addEventListener('mousedown', event => {
-            // Readonly text inputs can match :focus-visible even when clicked. Keep keyboard focus
-            // available, but do not focus an Interactive result with the mouse before Try again.
+            // Readonly result inputs still receive Bootstrap's :focus styling. Prevent mouse focus
+            // for these controls in every behaviour, while leaving keyboard focus and clicks available.
             if (event.button === 0 && event.target.matches(
-                '.que.clozeonimage input[readonly][data-clozeonimage-awaiting-retry="true"]'
+                '.que.clozeonimage .qtype-clozeonimage-feedback-region input.form-control[readonly]'
             )) {
                 event.preventDefault();
+                if (document.activeElement === event.target) {
+                    event.target.blur();
+                }
             }
         });
 
         document.addEventListener('focusin', event => {
+            // Native Tab focus selects all text even in readonly inputs. Collapse that entry selection,
+            // but leave subsequent manual selection/copying and editable inputs alone.
+            if (event.target.matches(
+                '.que.clozeonimage .qtype-clozeonimage-feedback-region input.form-control[readonly][type="text"]'
+            ) && event.target.selectionStart === 0 && event.target.selectionEnd === event.target.value.length) {
+                event.target.setSelectionRange(0, 0);
+            }
             const trigger = event.target.closest(triggerSelector);
             if (trigger) {
                 activateTransient(trigger);
@@ -227,7 +237,8 @@ define(['bootstrap'], function(Bootstrap) {
         });
 
         document.addEventListener('input', event => {
-            if (!event.target.matches(`${triggerSelector}.form-control`)) {
+            if (!event.target.matches(`${triggerSelector}.form-control`) || event.target.readOnly ||
+                    event.target.disabled || event.target.value === event.target.defaultValue) {
                 return;
             }
             const region = event.target.closest(feedbackRegionSelector);
@@ -237,6 +248,9 @@ define(['bootstrap'], function(Bootstrap) {
         });
 
         document.addEventListener('change', event => {
+            if (event.target.disabled || event.target.readOnly) {
+                return;
+            }
             const changedsurface = event.target.matches('select, input[type="radio"], input[type="checkbox"]');
             if (!changedsurface && !event.target.matches(clearSentinelSelector)) {
                 return;

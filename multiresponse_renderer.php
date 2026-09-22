@@ -143,7 +143,7 @@ class qtype_clozeonimage_multiresponse_renderer extends qtype_multianswer_subq_r
 
             $class = 'form-check text-wrap text-break qtype-clozeonimage-choice';
             $localstate = null;
-            if ($options->correctness && $isselected) {
+            if ($stateclass !== '' && $isselected) {
                 if ($answer->fraction > 0) {
                     if ($allpositiveanswersselected) {
                         $class .= ' correct';

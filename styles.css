@@ -517,24 +517,18 @@ form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-anchor-grid .qtype-clo
     z-index: 1;
 }
 
-.que.clozeonimage .qtype-clozeonimage-subquestion
-.qtype-clozeonimage-feedback-region:not(.qtype-clozeonimage-state-correct):not(
-    .qtype-clozeonimage-state-incorrect
-):not(.qtype-clozeonimage-state-partiallycorrect) .qtype-clozeonimage-review-surface:focus-visible {
+/* Only non-editable review controls get the dark inset focus; editable controls keep native styling. */
+.que.clozeonimage .qtype-clozeonimage-subquestion :is(
+input.form-control[readonly],
+.qtype-clozeonimage-review-surface
+):focus-visible {
     border-radius: var(--bs-border-radius);
-    outline: 3px solid var(--bs-focus-ring-color);
-    outline-offset: 5px;
+    box-shadow: inset 0 0 0 4px #212529;
 }
 
-.que.clozeonimage .qtype-clozeonimage-subquestion
-.qtype-clozeonimage-feedback-region:not(.qtype-clozeonimage-state-correct):not(
-    .qtype-clozeonimage-state-incorrect
-):not(.qtype-clozeonimage-state-partiallycorrect)
-.qtype-clozeonimage-feedback-trigger:not(.qtype-clozeonimage-review-surface):focus-visible {
-    outline: 3px solid var(--bs-focus-ring-color);
-    outline-offset: 5px;
-    position: relative;
-    z-index: 2;
+/* Replace the review button's native outline, leaving readonly inputs' semantic outlines intact. */
+.que.clozeonimage .qtype-clozeonimage-subquestion .qtype-clozeonimage-review-surface:focus-visible {
+    outline: 0;
 }
 
 .popover.qtype-clozeonimage-appearance-translucent,

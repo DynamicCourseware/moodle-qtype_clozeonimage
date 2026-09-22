@@ -88,9 +88,9 @@ class qtype_clozeonimage_textfield_renderer extends qtype_multianswer_subq_rende
         }
         if ($options->readonly) {
             $inputattributes['readonly'] = 'readonly';
+            $this->page->requires->js_call_amd('qtype_clozeonimage/feedback', 'init');
             if ($qa->get_behaviour() instanceof qbehaviour_interactive && $qa->get_behaviour()->is_try_again_state()) {
                 $inputattributes['data-clozeonimage-awaiting-retry'] = 'true';
-                $this->page->requires->js_call_amd('qtype_clozeonimage/feedback', 'init');
             }
         }
 

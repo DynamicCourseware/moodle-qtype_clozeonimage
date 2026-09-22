@@ -25,8 +25,11 @@ trait qtype_clozeonimage_feedback_renderer_trait {
     /** @var string Appearance class transferred to generated feedback popovers. */
     private string $feedbackpopoverclass = 'qtype-clozeonimage-appearance-translucent';
 
+    /** @var bool Whether this render has a current submitted or finished result, rather than an editing response. */
+    private bool $hascurrentresult = false;
+
     /**
-     * Initialise the appearance used by this subquestion's feedback popovers.
+     * Initialise the appearance and current-result context used by this subquestion's feedback popovers.
      *
      * @param question_attempt $qa Question attempt being rendered.
      */
@@ -34,6 +37,10 @@ trait qtype_clozeonimage_feedback_renderer_trait {
         $this->feedbackpopoverclass = qtype_clozeonimage::control_appearance_class(
             $qa->get_question()->controlappearance
         );
+        // Marks permissions also remain enabled during editing. A saved or retained response
+        // must not acquire fresh earned marks merely because the renderer can match its answer.
+        $this->hascurrentresult = $qa->get_state()->is_finished() ||
+            ($qa->get_last_step()->has_behaviour_var('submit') && $qa->get_state() !== question_state::$invalid);
     }
 
     /**
@@ -81,13 +88,12 @@ trait qtype_clozeonimage_feedback_renderer_trait {
         question_display_options $options
     ) {
         $feedback = [];
-        if ($options->correctness) {
-            $state = is_null($fraction)
-                ? question_state::$gaveup
-                : question_state::graded_state_for_fraction($fraction);
+        [$stateclass, $statustext] = $this->review_state($fraction, $fraction !== null, $options);
+        if ($stateclass !== '') {
             $feedback[] = html_writer::div(
-                $state->default_string(true),
-                'qtype-clozeonimage-feedback-section qtype-clozeonimage-feedback-state'
+                $statustext,
+                'qtype-clozeonimage-feedback-section qtype-clozeonimage-feedback-state',
+                ['data-clozeonimage-result-state' => $stateclass]
             );
         }
 
@@ -105,17 +111,22 @@ trait qtype_clozeonimage_feedback_renderer_trait {
             );
         }
 
-        $showresult = $options->readonly || $options->correctness || $options->feedback || $options->rightanswer;
-        if (
-            $showresult && $options->marks >= question_display_options::MARK_AND_MAX && $subq->defaultmark > 0 &&
-                (!is_null($fraction) || $feedback)
+        $marktext = '';
+        if ($options->marks == question_display_options::MAX_ONLY && $subq->defaultmark > 0) {
+            $marktext = get_string('markedoutofmax', 'question', format_float($subq->defaultmark, $options->markdp));
+        } else if (
+            $options->marks == question_display_options::MARK_AND_MAX &&
+                $this->hascurrentresult && $subq->defaultmark > 0
         ) {
             $mark = (object) [
-                'mark' => format_float($fraction * $subq->defaultmark, $options->markdp),
+                'mark' => format_float(($fraction ?? 0) * $subq->defaultmark, $options->markdp),
                 'max' => format_float($subq->defaultmark, $options->markdp),
             ];
+            $marktext = get_string('markoutofmax', 'question', $mark);
+        }
+        if ($marktext !== '') {
             $feedback[] = html_writer::div(
-                get_string('markoutofmax', 'question', $mark),
+                $marktext,
                 'qtype-clozeonimage-feedback-section'
             );
         }

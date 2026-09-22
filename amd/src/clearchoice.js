@@ -40,12 +40,27 @@ define([], function() {
     const getLocalElement = (region, selector) => region.querySelector(selector);
 
     /**
+     * Show Clear only for a selected editable answer whose complete region contains focus.
+     *
+     * @param {HTMLElement} region Local radio feedback/control region.
+     * @param {EventTarget|null} focused Focus destination, including during focusout.
+     */
+    const updateClear = (region, focused = document.activeElement) => {
+        const button = getLocalElement(region, clearSelector);
+        if (!button) {
+            return;
+        }
+        const selected = region.querySelector(`${choiceSelector}:checked:not(:disabled)`);
+        button.hidden = button.disabled || !selected || !focused || !region.contains(focused);
+    };
+
+    /**
      * Make the local Clear button available after a visible choice is selected.
      *
      * @param {HTMLInputElement} choice Selected visible radio.
      */
     const choiceChanged = choice => {
-        if (!choice.checked) {
+        if (!choice.checked || choice.matches(':disabled')) {
             return;
         }
         const region = choice.closest(regionSelector);
@@ -54,9 +69,8 @@ define([], function() {
         if (!sentinel || !button) {
             return;
         }
-        sentinel.checked = false;
         sentinel.disabled = true;
-        button.hidden = false;
+        updateClear(region);
     };
 
     /**
@@ -68,21 +82,30 @@ define([], function() {
         const region = button.closest(regionSelector);
         const selected = region?.querySelector(`${choiceSelector}:checked`);
         const sentinel = region ? getLocalElement(region, sentinelSelector) : null;
-        if (!selected || !sentinel || selected.disabled) {
+        if (!selected || !sentinel || selected.matches(':disabled') || button.disabled) {
             return;
         }
 
+        selected.checked = false;
         sentinel.disabled = false;
-        sentinel.checked = true;
         button.hidden = true;
         sentinel.dispatchEvent(new Event('change', {bubbles: true}));
-        selected.focus();
+        region.querySelector(`${choiceSelector}:not(:disabled)`)?.focus();
     };
 
     /**
      * Initialise delegated Clear choice interactions.
      */
     const init = () => {
+        // Account for focus restored before this module loads, and for newly rendered regions.
+        document.querySelectorAll(regionSelector).forEach(region => {
+            const sentinel = getLocalElement(region, sentinelSelector);
+            if (sentinel) {
+                // A restored visible selection must be the sole submitted value.
+                sentinel.disabled = !!region.querySelector(`${choiceSelector}:checked`);
+            }
+            updateClear(region);
+        });
         if (initialised) {
             return;
         }
@@ -102,11 +125,19 @@ define([], function() {
         });
 
         document.addEventListener('focusin', event => {
-            if (!event.target.matches(sentinelSelector) || !event.target.checked) {
+            const region = event.target.closest(regionSelector);
+            if (!region) {
                 return;
             }
+            updateClear(region);
+        });
+
+        document.addEventListener('focusout', event => {
             const region = event.target.closest(regionSelector);
-            region?.querySelector(`${choiceSelector}:not(:disabled)`)?.focus();
+            if (region) {
+                // The next radio or Clear button belongs to the same scope; null means focus left it.
+                updateClear(region, event.relatedTarget);
+            }
         });
     };
 
