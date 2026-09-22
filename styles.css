@@ -531,6 +531,16 @@ input.form-control[readonly],
     outline: 0;
 }
 
+/* Exclude the dropdown's Bootstrap mb-1 margin from its keyboard-focused semantic review surface. */
+.que.clozeonimage .qtype-clozeonimage-subquestion
+.qtype-clozeonimage-feedback-region.subquestion:is(
+    .qtype-clozeonimage-state-correct,
+    .qtype-clozeonimage-state-incorrect,
+    .qtype-clozeonimage-state-partiallycorrect
+) > select.form-select.mb-1:disabled + .qtype-clozeonimage-review-surface:focus-visible {
+    bottom: .25rem;
+}
+
 .popover.qtype-clozeonimage-appearance-translucent,
 .popover.qtype-clozeonimage-appearance-opaque {
     --qtype-clozeonimage-popover-bg: rgba(247, 247, 247, 0.94);

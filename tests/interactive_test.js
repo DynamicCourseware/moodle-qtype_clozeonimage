@@ -203,6 +203,54 @@ test('dark rounded keyboard focus applies only to non-editable review controls w
     }
 });
 
+test('dropdown review geometry excludes mb-1 only with semantic state and keyboard focus', () => {
+    const css = postcss.parse(readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8'));
+    const rules = [];
+    css.walkRules(rule => {
+        if (rule.selector.includes('select.form-select.mb-1:disabled')) {
+            rules.push(rule);
+        }
+    });
+    assert.equal(rules.length, 1);
+    const rule = rules[0];
+    assert.ok(rule.selector.startsWith('.que.clozeonimage .qtype-clozeonimage-subquestion'));
+    assert.ok(rule.selector.endsWith(' + .qtype-clozeonimage-review-surface:focus-visible'));
+    assert.deepEqual(rule.nodes.map(node => [node.prop, node.value]), [['bottom', '.25rem']]);
+
+    const dom = new JSDOM('<div class="que clozeonimage"><div class="qtype-clozeonimage-subquestion">' +
+        '<span class="subquestion qtype-clozeonimage-feedback-region"></span></div></div>');
+    try {
+        const region = dom.window.document.querySelector('.qtype-clozeonimage-feedback-region');
+        // Only structural matching here. Native focus-visible and pixel geometry require a browser.
+        const selector = rule.selector.replace(':focus-visible', '');
+        for (const state of ['', 'notanswered', 'correct', 'incorrect', 'partiallycorrect']) {
+            region.className = 'subquestion qtype-clozeonimage-feedback-region' +
+                (state ? ` qtype-clozeonimage-state-${state}` : '');
+            for (const disabled of [false, true]) {
+                region.innerHTML = `<select class="form-select d-inline-block mb-1" ${disabled ? 'disabled' : ''}>` +
+                    '<option>Answer</option></select><button class="qtype-clozeonimage-review-surface">Feedback</button>';
+                assert.equal(region.querySelector('button').matches(selector),
+                    disabled && ['correct', 'incorrect', 'partiallycorrect'].includes(state), `${state}, ${disabled}`);
+            }
+            for (const control of [
+                '<input class="form-control" readonly>',
+                '<fieldset class="answer"><input type="radio" disabled></fieldset>',
+                '<fieldset class="answer"><input type="checkbox" disabled></fieldset>',
+                '<select class="form-select" disabled><option>Without mb-1</option></select>',
+            ]) {
+                region.innerHTML = control + '<button class="qtype-clozeonimage-review-surface">Feedback</button>';
+                assert.equal(region.querySelector('button').matches(selector), false);
+            }
+        }
+        region.innerHTML = '<select class="form-select mb-1" disabled><option>Answer</option></select>' +
+            '<button class="qtype-clozeonimage-review-surface">Feedback</button>';
+        dom.window.document.querySelector('.que').className = 'que other';
+        assert.equal(region.querySelector('button').matches(selector), false);
+    } finally {
+        dom.window.close();
+    }
+});
+
 test('editable choice panels and Clear retain their pre-pass focus presentation', () => {
     const css = postcss.parse(readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8'));
     const rules = [];
