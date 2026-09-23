@@ -431,7 +431,8 @@ class qtype_clozeonimage_edit_form extends question_edit_form {
             $draft = file_get_drafarea_files($draftitemid);
             foreach ($draft->list as $file) {
                 if (!empty($file->url) && $file->filename !== '.') {
-                    return [$file->url, (int)($file->image_width ?? 0)];
+                    $draftimage = self::get_draft_image_file($draftitemid);
+                    return [$file->url, $draftimage ? self::get_intrinsic_image_width($draftimage) : 0];
                 }
             }
         }
@@ -466,6 +467,34 @@ class qtype_clozeonimage_edit_form extends question_edit_form {
         }
 
         return null;
+    }
+
+    /**
+     * Read the intrinsic width as displayed by the browser, without changing the stored image.
+     *
+     * Moodle's image metadata reports encoded dimensions. JPEG EXIF orientations 5-8 swap
+     * those axes when browsers display the image and expose its naturalWidth to form.js.
+     *
+     * @param stored_file $file Background image.
+     * @return int Oriented intrinsic width, or zero when dimensions are unavailable.
+     */
+    private static function get_intrinsic_image_width(stored_file $file): int {
+        $info = $file->get_imageinfo();
+        if (!$info) {
+            return 0;
+        }
+        if ($info['mimetype'] === 'image/jpeg' && function_exists('exif_read_data')) {
+            $handle = $file->get_content_file_handle();
+            try {
+                $exif = @exif_read_data($handle, 'IFD0');
+            } finally {
+                fclose($handle);
+            }
+            if (in_array((int) ($exif['Orientation'] ?? 0), [5, 6, 7, 8], true)) {
+                return (int) $info['height'];
+            }
+        }
+        return (int) $info['width'];
     }
 
     /**
@@ -730,13 +759,7 @@ class qtype_clozeonimage_edit_form extends question_edit_form {
             $errors['bgimage'] = get_string('nobgimage', 'qtype_clozeonimage');
         }
 
-        $imagewidth = 0;
-        foreach ($draft->list as $file) {
-            if ($file->filename !== '.' && !empty($file->image_width)) {
-                $imagewidth = (int)$file->image_width;
-                break;
-            }
-        }
+        $imagewidth = $draftimage ? self::get_intrinsic_image_width($draftimage) : 0;
         $displaywidth = (int)($data['displaywidth'] ?? 0);
         if ($draftimage && file_is_svg_image_from_mimetype($draftimage->get_mimetype())) {
             if ($displaywidth < 200) {

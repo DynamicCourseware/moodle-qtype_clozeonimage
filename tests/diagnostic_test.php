@@ -372,6 +372,111 @@ final class diagnostic_test extends \advanced_testcase {
     }
 
     /**
+     * Browser-oriented raster widths, including mirrored quarter-turn EXIF orientations.
+     *
+     * @return array
+     */
+    public static function oriented_image_width_provider(): array {
+        return [
+            'rotated minimum' => [960, 1777, 6, 200, 1777, true],
+            'rotated fitted width' => [960, 1777, 6, 1073, 1777, true],
+            'rotated maximum' => [960, 1777, 6, 1777, 1777, true],
+            'rotated above maximum' => [960, 1777, 6, 1778, 1777, false],
+            'rotated below minimum' => [960, 1777, 6, 199, 1777, false],
+            'transpose' => [960, 1777, 5, 1073, 1777, true],
+            'transverse' => [960, 1777, 7, 1073, 1777, true],
+            'counterclockwise' => [960, 1777, 8, 1073, 1777, true],
+            'normal orientation' => [960, 1777, 1, 961, 960, false],
+            'horizontal mirror' => [960, 1777, 2, 961, 960, false],
+            'half turn' => [960, 1777, 3, 961, 960, false],
+            'vertical mirror' => [960, 1777, 4, 961, 960, false],
+            'normalised large image' => [1777, 960, null, 1073, 1777, true],
+            'ordinary maximum' => [400, 250, null, 400, 400, true],
+            'ordinary above maximum' => [400, 250, null, 401, 400, false],
+            'rotated narrow intrinsic width' => [300, 100, 6, 100, 100, true],
+            'rotated narrow below minimum' => [300, 100, 6, 99, 100, false],
+            'rotated narrow above maximum' => [300, 100, 6, 101, 100, false],
+        ];
+    }
+
+    /**
+     * Exercise the real draft-metadata and form-validation path with an EXIF-bearing JPEG.
+     *
+     * No Moodle-version behaviour is mocked: both core versions report unrotated dimensions.
+     *
+     * @param int $rawwidth Encoded JPEG width.
+     * @param int $rawheight Encoded JPEG height.
+     * @param int|null $orientation EXIF orientation, or no EXIF segment.
+     * @param int $displaywidth Submitted width.
+     * @param int $intrinsicwidth Width after browser orientation.
+     * @param bool $valid Whether the submitted width is valid.
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('oriented_image_width_provider')]
+    public function test_oriented_image_width_validation(
+        int $rawwidth,
+        int $rawheight,
+        ?int $orientation,
+        int $displaywidth,
+        int $intrinsicwidth,
+        bool $valid
+    ): void {
+        if (!function_exists('exif_read_data')) {
+            $this->markTestSkipped('The optional PHP EXIF extension is required for orientation metadata.');
+        }
+        [$form, $category, $draftitemid] = $this->make_form();
+        $image = imagecreatetruecolor($rawwidth, $rawheight);
+        ob_start();
+        imagejpeg($image);
+        $content = ob_get_clean();
+        imagedestroy($image);
+        if ($orientation !== null) {
+            // Minimal little-endian TIFF IFD0: one SHORT Orientation tag, with no thumbnail dimensions.
+            $exif = "Exif\0\0II" . pack('vV', 42, 8) . pack('v', 1) .
+                pack('vvVv', 0x0112, 3, 1, $orientation) . "\0\0" . pack('V', 0);
+            $content = substr($content, 0, 2) . "\xff\xe1" . pack('n', strlen($exif) + 2) .
+                $exif . substr($content, 2);
+        }
+        $this->replace_draft_image($draftitemid, 'oriented.jpg', 'image/jpeg', $content);
+        $metadata = file_get_drafarea_files($draftitemid);
+        $this->assertSame($rawwidth, (int) $metadata->list[0]->image_width);
+        $errors = $form->validation([
+            'category' => $category->id,
+            'questiontext' => ['text' => 'Question text', 'format' => FORMAT_HTML],
+            'bgimage' => $draftitemid,
+            'displaywidth' => $displaywidth,
+            'subquestion' => ['{1:SHORTANSWER:=Paris~Marseille}'],
+        ], []);
+        if ($valid) {
+            $this->assertArrayNotHasKey('displaywidthgroup', $errors);
+        } else {
+            $this->assertSame(get_string('displaywidthrange', 'qtype_clozeonimage', (object) [
+                'min' => min(200, $intrinsicwidth),
+                'max' => $intrinsicwidth,
+            ]), $errors['displaywidthgroup']);
+        }
+        // The server preview fallback must agree with the range derived from naturalWidth in form.js.
+        $_POST['bgimage'] = $draftitemid;
+        try {
+            $method = new \ReflectionMethod($form, 'get_preview_image');
+            [$url, $previewwidth] = $method->invoke($form);
+            $this->assertStringContainsString('oriented.jpg', $url);
+            $this->assertSame($intrinsicwidth, $previewwidth);
+        } finally {
+            unset($_POST['bgimage']);
+        }
+        global $USER;
+        $storedfile = get_file_storage()->get_file(
+            \context_user::instance($USER->id)->id,
+            'user',
+            'draft',
+            $draftitemid,
+            '/',
+            'oriented.jpg'
+        );
+        $this->assertSame(sha1($content), $storedfile->get_contenthash(), 'Validation must not rotate or rewrite the image.');
+    }
+
+    /**
      * Access the underlying QuickForm object.
      */
     private function get_quickform(\qtype_clozeonimage_edit_form $form): \MoodleQuickForm {
