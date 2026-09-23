@@ -71,6 +71,10 @@
     cursor: grabbing;
 }
 
+#qtype-clozeonimage-preview-composition .qtype-clozeonimage-preview-subquestion * {
+    cursor: inherit;
+}
+
 .qtype-clozeonimage-preview-control {
     position: relative;
     display: inline-block;
