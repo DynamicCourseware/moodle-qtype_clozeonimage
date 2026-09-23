@@ -343,6 +343,62 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
     }
 
     /**
+     * Every supported rendered family, with and without answer shuffling, in both appearances.
+     *
+     * @return array
+     */
+    public static function family_appearance_provider(): array {
+        $cases = [];
+        $types = [
+            'shortanswer', 'shortanswer_case_sensitive', 'numerical', 'multichoice', 'multichoice_s',
+            'multichoice_vertical', 'multichoice_shuffled_vertical',
+            'multichoice_horizontal', 'multichoice_shuffled_horizontal',
+            'multiresponse_vertical', 'multiresponse_shuffled_vertical',
+            'multiresponse_horizontal', 'multiresponse_shuffled_horizontal',
+        ];
+        foreach ($types as $type) {
+            foreach (self::control_appearance_provider() as [$appearance, $class]) {
+                $cases[$type . ' ' . $appearance] = [$type, $appearance, $class];
+            }
+        }
+        return $cases;
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('family_appearance_provider')]
+    public function test_all_control_families_inherit_appearance_through_check_and_review(
+        string $type,
+        int $appearance,
+        string $class
+    ): void {
+        $question = $this->make_question($appearance, $type);
+        $this->start_attempt_at_question($question, 'adaptive', 1);
+        $response = $question->get_correct_response();
+        foreach (['editable', 'checked', 'review'] as $phase) {
+            if ($phase === 'checked') {
+                $this->process_submission($response + ['-submit' => 1]);
+                $this->displayoptions->correctness = true;
+            } else if ($phase === 'review') {
+                $this->finish();
+            }
+            $this->render();
+            $xpath = $this->xpath($this->currentoutput);
+            $composition = $xpath->query('//div[@class="qtype-clozeonimage-composition ' . $class . '"]');
+            $this->assertCount(1, $composition, $phase);
+            $controls = $xpath->query('.//input[not(@type="hidden")] | .//select', $composition->item(0));
+            $this->assertGreaterThan(0, $controls->length, $type . ' ' . $phase);
+            foreach ($controls as $control) {
+                $this->assertSame(
+                    $phase === 'review',
+                    $control->hasAttribute('readonly') || $control->hasAttribute('disabled'),
+                    $type . ' ' . $phase
+                );
+            }
+            $this->assertCount(1, $xpath->query('.//div[@style="left:12px;top:12px;"]', $composition->item(0)));
+            $this->assertCount(1, $xpath->query('.//img[contains(@style, "width:321px")]', $composition->item(0)));
+        }
+    }
+
+    /**
      * Appearance classes used by feedback popover triggers.
      *
      * @return array<string, array{int,string,string}>

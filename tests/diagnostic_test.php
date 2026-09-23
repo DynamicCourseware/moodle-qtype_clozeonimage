@@ -466,6 +466,37 @@ final class diagnostic_test extends \advanced_testcase {
         );
     }
 
+    /**
+     * Verify the normal preview rebuild propagates either appearance to every supported source and alias.
+     *
+     * @param string $source Cloze source.
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('valid_sources_provider')]
+    public function test_preview_appearance_for_every_family(string $source): void {
+        foreach ([0 => 'translucent', 1 => 'opaque'] as $appearance => $suffix) {
+            [$form] = $this->make_form([
+                'controlappearance' => $appearance,
+                'subquestion' => [$source],
+                'xleft' => [17],
+                'ytop' => [29],
+            ]);
+            $dom = new \DOMDocument();
+            @$dom->loadHTML($form->render());
+            $xpath = new \DOMXPath($dom);
+            $composition = $xpath->query('//*[@id="qtype-clozeonimage-preview-composition"]')->item(0);
+            $this->assertSame(
+                'qtype-clozeonimage-preview-composition qtype-clozeonimage-appearance-' . $suffix,
+                $composition->getAttribute('class')
+            );
+            $controls = $xpath->query('.//input | .//select', $composition);
+            $this->assertGreaterThan(0, $controls->length);
+            foreach ($controls as $control) {
+                $this->assertTrue($control->hasAttribute('disabled'));
+            }
+            $this->assertCount(1, $xpath->query('.//div[@style="left:17px;top:29px;"]', $composition));
+        }
+    }
+
     public function test_control_appearance_preview_class(): void {
         [$translucentform] = $this->make_form();
         $translucentpreview = $translucentform->render();

@@ -45,6 +45,7 @@
 
 .qtype-clozeonimage-preview-composition.qtype-clozeonimage-appearance-opaque,
 .que.clozeonimage .qtype-clozeonimage-composition.qtype-clozeonimage-appearance-opaque {
+    --qtype-clozeonimage-neutral-bg: #f5f5f5;
     --qtype-clozeonimage-control-bg: var(--qtype-clozeonimage-neutral-bg);
     --qtype-clozeonimage-disabled-control-bg: var(--qtype-clozeonimage-neutral-bg);
     --qtype-clozeonimage-choice-panel-bg: var(--qtype-clozeonimage-neutral-bg);
@@ -343,10 +344,10 @@ form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-anchor-grid .qtype-clo
 
 .que.clozeonimage .qtype-clozeonimage-clear-choice {
     align-items: center;
-    background-color: transparent;
+    background-color: var(--qtype-clozeonimage-neutral-bg);
     block-size: 1.5rem;
-    border: 0;
-    border-radius: var(--bs-border-radius-sm);
+    border: var(--bs-border-width) solid var(--bs-gray-500);
+    border-radius: var(--bs-border-radius);
     color: var(--bs-danger-text-emphasis, #842029);
     cursor: pointer;
     display: inline-flex;
@@ -363,15 +364,6 @@ form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-anchor-grid .qtype-clo
 
 .que.clozeonimage .qtype-clozeonimage-clear-choice[hidden] {
     display: none;
-}
-
-.que.clozeonimage .qtype-clozeonimage-clear-choice:is(:hover, :focus-visible) {
-    background-color: rgba(var(--bs-danger-rgb), .18);
-}
-
-.que.clozeonimage .qtype-clozeonimage-clear-choice:focus-visible {
-    outline: 2px solid var(--bs-primary);
-    outline-offset: 2px;
 }
 
 .que.clozeonimage .qtype-clozeonimage-subquestion
@@ -438,7 +430,8 @@ form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-anchor-grid .qtype-clo
     .qtype-clozeonimage-state-correct,
     .qtype-clozeonimage-state-incorrect,
     .qtype-clozeonimage-state-partiallycorrect
-)):focus-within > .answer:has(.form-check-input:not(:disabled)) {
+)):focus-within > .answer:has(.form-check-input:not(:disabled)),
+.que.clozeonimage .qtype-clozeonimage-clear-choice:focus {
     border-color: #87b6df;
     box-shadow: 0 0 0 var(--bs-focus-ring-width) var(--bs-focus-ring-color);
     outline: 0;

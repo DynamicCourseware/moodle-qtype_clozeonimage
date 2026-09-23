@@ -251,7 +251,7 @@ test('dropdown review geometry excludes mb-1 only with semantic state and keyboa
     }
 });
 
-test('editable choice panels and Clear retain their pre-pass focus presentation', () => {
+test('editable choice panels and Clear share the Moodle focus presentation', () => {
     const css = postcss.parse(readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8'));
     const rules = [];
     css.walkRules(rule => {
@@ -265,10 +265,10 @@ test('editable choice panels and Clear retain their pre-pass focus presentation'
     assert.ok(rules[0].selector.startsWith('.que.clozeonimage '));
     assert.ok(rules[0].selector.includes(':focus-within'));
     const clearRule = css.nodes.find(rule =>
-        rule.selector === '.que.clozeonimage .qtype-clozeonimage-clear-choice:focus-visible');
+        rule.selectors?.includes('.que.clozeonimage .qtype-clozeonimage-clear-choice:focus'));
     assert.ok(clearRule);
-    assert.equal(clearRule.nodes.find(node => node.prop === 'outline').value, '2px solid var(--bs-primary)');
-    assert.equal(clearRule.nodes.find(node => node.prop === 'outline-offset').value, '2px');
+    assert.equal(clearRule, rules[0]);
+    assert.equal(clearRule.nodes.find(node => node.prop === 'outline').value, '0');
 });
 
 for (const directory of ['src', 'build']) {
