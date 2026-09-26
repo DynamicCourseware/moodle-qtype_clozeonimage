@@ -38,6 +38,7 @@ require_once($CFG->dirroot . '/question/type/clozeonimage/multiresponse_renderer
 class qtype_clozeonimage_renderer extends qtype_multianswer_renderer {
     #[\Override]
     public function formulation_and_controls(question_attempt $qa, question_display_options $options) {
+        global $CFG;
         $question = $qa->get_question();
 
         $output = $question->format_text(
@@ -97,7 +98,25 @@ class qtype_clozeonimage_renderer extends qtype_multianswer_renderer {
                     'error'
                 );
             }
-            $output .= html_writer::div($composition, 'qtype-clozeonimage-scroll');
+            $viewportid = $qa->get_qt_field_name('panorama');
+            // A quiz attempt owns one question usage, including when an attempt builds on the last.
+            // The slot distinguishes repeated uses of the same question inside that usage.
+            $widekey = 'qtype_clozeonimage:wide:v1:' . sha1($CFG->wwwroot) .
+                ':usage:' . $qa->get_usage_id() . ':slot:' . $qa->get_slot() . ':question:' . $qa->get_question_id();
+            $output .= html_writer::div($composition, 'qtype-clozeonimage-scroll', [
+                'id' => $viewportid,
+                'data-wide-key' => $widekey,
+            ]);
+            $output .= html_writer::div(html_writer::tag('button', get_string('panoramicview', 'qtype_clozeonimage'), [
+                'type' => 'button',
+                'class' => 'btn btn-link btn-sm p-0 mt-2',
+                'data-action' => 'clozeonimage-toggle-panorama',
+                'data-normal-label' => get_string('panoramicview', 'qtype_clozeonimage'),
+                'data-panorama-label' => get_string('exitpanoramicview', 'qtype_clozeonimage'),
+                'aria-controls' => $viewportid,
+                'aria-pressed' => 'false',
+                'hidden' => 'hidden',
+            ]), 'qtype-clozeonimage-view-controls');
             $this->page->requires->js_call_amd('qtype_clozeonimage/layout', 'init');
         }
 

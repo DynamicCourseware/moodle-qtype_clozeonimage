@@ -59,6 +59,7 @@ define(['theme_boost/index'], function(Bootstrap) {
     let initialised = false;
     let transientTrigger = null;
     let pinnedTrigger = null;
+    let dismissedTrigger = null;
 
     /**
      * Hide one feedback popover and optionally remove focus from its trigger.
@@ -126,6 +127,9 @@ define(['theme_boost/index'], function(Bootstrap) {
      * @param {HTMLElement} trigger Feedback trigger.
      */
     const discardTrigger = trigger => {
+        if (dismissedTrigger === trigger) {
+            dismissedTrigger = null;
+        }
         if (pinnedTrigger === trigger) {
             pinnedTrigger = null;
         }
@@ -175,6 +179,12 @@ define(['theme_boost/index'], function(Bootstrap) {
 
         document.addEventListener('hide.bs.popover', preventPinnedHide, true);
         document.addEventListener('hidden.bs.popover', popoverHidden, true);
+        // Restoring focus after a view change must not reopen feedback dismissed with Escape.
+        document.addEventListener('show.bs.popover', event => {
+            if (event.target === dismissedTrigger) {
+                event.preventDefault();
+            }
+        }, true);
 
         document.addEventListener('mousedown', event => {
             // Readonly result inputs still receive Bootstrap's :focus styling. Prevent mouse focus
@@ -190,6 +200,9 @@ define(['theme_boost/index'], function(Bootstrap) {
         });
 
         document.addEventListener('focusin', event => {
+            if (dismissedTrigger && event.target !== dismissedTrigger && !dismissedTrigger.contains(event.target)) {
+                dismissedTrigger = null;
+            }
             // Native Tab focus selects all text even in readonly inputs. Collapse that entry selection,
             // but leave subsequent manual selection/copying and editable inputs alone.
             if (event.target.matches(
@@ -206,11 +219,15 @@ define(['theme_boost/index'], function(Bootstrap) {
         document.addEventListener('pointerover', event => {
             const trigger = event.target.closest(triggerSelector);
             if (trigger) {
+                if (!trigger.contains(event.relatedTarget)) {
+                    dismissedTrigger = null;
+                }
                 activateTransient(trigger);
             }
         });
 
         document.addEventListener('click', event => {
+            dismissedTrigger = null;
             const trigger = event.target.closest(triggerSelector);
 
             if (pinnedTrigger) {
@@ -267,12 +284,18 @@ define(['theme_boost/index'], function(Bootstrap) {
             }
 
             const eventTrigger = event.target.closest(triggerSelector);
-            const trigger = eventTrigger ?? transientTrigger ?? pinnedTrigger;
+            // A closed but focused trigger must not consume a second Escape intended for the view.
+            const trigger = [eventTrigger, transientTrigger, pinnedTrigger, ...document.querySelectorAll(triggerSelector)]
+                .find(candidate => {
+                    const popup = document.getElementById(candidate?.getAttribute('aria-describedby'));
+                    return popup?.classList.contains('show');
+                });
             if (!trigger) {
                 return;
             }
             event.preventDefault();
-            close(trigger, true);
+            dismissedTrigger = trigger;
+            close(trigger);
         });
     };
 

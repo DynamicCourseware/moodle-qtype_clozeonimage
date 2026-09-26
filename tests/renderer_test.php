@@ -285,6 +285,7 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
      * Assert the background image retains its rendering attributes and localized alternative.
      */
     private function assert_background_image(string $html): void {
+        global $CFG;
         $document = new \DOMDocument();
         @$document->loadHTML($html);
         $xpath = new \DOMXPath($document);
@@ -299,6 +300,21 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
         $this->assertStringContainsString('private-background-filename.png', $image->getAttribute('src'));
         $this->assertSame('qtype-clozeonimage-image', $image->getAttribute('class'));
         $this->assertSame('max-width:none;height:auto;width:321px;', $image->getAttribute('style'));
+        $buttons = $xpath->query('//button[@data-action="clozeonimage-toggle-panorama"]');
+        $this->assertCount(1, $buttons);
+        $button = $buttons->item(0);
+        $this->assertSame('button', $button->getAttribute('type'));
+        $this->assertSame('false', $button->getAttribute('aria-pressed'));
+        $this->assertTrue($button->hasAttribute('hidden'));
+        $this->assertSame(get_string('panoramicview', 'qtype_clozeonimage'), $button->textContent);
+        $this->assertSame(get_string('exitpanoramicview', 'qtype_clozeonimage'), $button->getAttribute('data-panorama-label'));
+        $viewport = $xpath->query('//div[@class="qtype-clozeonimage-scroll"]')->item(0);
+        $qa = $this->get_question_attempt();
+        $this->assertSame('qtype_clozeonimage:wide:v1:' . sha1($CFG->wwwroot) .
+            ':usage:' . $qa->get_usage_id() . ':slot:' . $qa->get_slot() . ':question:' . $qa->get_question_id(),
+            $viewport->getAttribute('data-wide-key'));
+        $this->assertSame($viewport->getAttribute('id'), $button->getAttribute('aria-controls'));
+        $this->assertSame('qtype-clozeonimage-view-controls', $viewport->nextSibling->getAttribute('class'));
     }
 
     public function test_attempt_and_review_use_localized_background_alternative(): void {

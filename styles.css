@@ -3,6 +3,101 @@
     overflow: visible;
 }
 
+/* Contain the image's intrinsic width without changing Moodle's page layout. */
+.que.clozeonimage.qtype-clozeonimage-panorama-active,
+.que.clozeonimage.qtype-clozeonimage-panorama-active > .content {
+    min-width: 0;
+    max-width: 100%;
+}
+
+/* Stack Info only while this question is in panoramic view. */
+.que.clozeonimage.qtype-clozeonimage-panorama-active {
+    flex-direction: column;
+}
+
+.que.clozeonimage.qtype-clozeonimage-panorama-active > .info,
+.que.clozeonimage.qtype-clozeonimage-panorama-active > .content {
+    width: 100%;
+}
+
+.qtype-clozeonimage-panorama-active .qtype-clozeonimage-panorama-anchor {
+    /* Pass formulation styling through to the viewport, including its breakout area. */
+    background: inherit;
+    border-color: inherit;
+    border-radius: inherit;
+    contain: inline-size;
+    min-width: 0;
+    position: relative;
+}
+
+.qtype-clozeonimage-panorama-active .qtype-clozeonimage-scroll.qtype-clozeonimage-panorama {
+    --qtype-clozeonimage-panorama-gutter: 10px;
+    background: inherit;
+    border: var(--bs-border-width) solid;
+    border-color: transparent;
+    border-left-color: inherit;
+    border-right-color: inherit;
+    border-radius: inherit;
+    box-sizing: border-box;
+    max-width: none;
+    min-width: 0;
+    overflow-x: auto;
+    direction: ltr;
+    overscroll-behavior-x: contain;
+    scroll-padding-inline: var(--qtype-clozeonimage-panorama-gutter);
+    overflow-anchor: none;
+}
+
+/* Paint only the breakout wings, outside the scrolling content and without intercepting input. */
+.qtype-clozeonimage-panorama-active .qtype-clozeonimage-panorama-anchor::before,
+.qtype-clozeonimage-panorama-active .qtype-clozeonimage-panorama-anchor::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: var(--panorama-left);
+    width: var(--panorama-width);
+    box-sizing: border-box;
+    border: var(--bs-border-width) solid;
+    border-color: inherit;
+    border-radius: inherit;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.qtype-clozeonimage-panorama-active .qtype-clozeonimage-panorama-anchor::before {
+    clip-path: inset(0 calc(100% - var(--panorama-left-wing)) 0 0);
+}
+
+.qtype-clozeonimage-panorama-active .qtype-clozeonimage-panorama-anchor::after {
+    clip-path: inset(0 0 0 calc(100% - var(--panorama-right-wing)));
+}
+
+.qtype-clozeonimage-panorama-active .qtype-clozeonimage-panorama-track {
+    box-sizing: content-box;
+    position: relative;
+    /* Retain the vertical gutters around the measured full visual canvas. */
+    padding-top: 12px;
+    padding-bottom: 16px;
+}
+
+.qtype-clozeonimage-panorama-active .qtype-clozeonimage-panorama .qtype-clozeonimage-composition {
+    display: block;
+    width: max-content;
+}
+
+.qtype-clozeonimage-panorama-active .qtype-clozeonimage-panorama-can-drag .qtype-clozeonimage-image {
+    cursor: grab;
+    touch-action: pan-y pinch-zoom;
+    user-select: none;
+}
+
+.qtype-clozeonimage-panorama-active .qtype-clozeonimage-panorama-dragging,
+.qtype-clozeonimage-panorama-active .qtype-clozeonimage-panorama-dragging .qtype-clozeonimage-image {
+    cursor: grabbing;
+    user-select: none;
+}
+
 .qtype-clozeonimage-composition,
 .qtype-clozeonimage-preview-composition {
     --qtype-clozeonimage-neutral-bg: rgba(245, 245, 245, 0.78);
