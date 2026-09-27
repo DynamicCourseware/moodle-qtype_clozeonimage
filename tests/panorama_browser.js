@@ -84,8 +84,8 @@ const fixture = width => `<!doctype html><html><body class="pagelayout-standard 
     <div class="qtype-clozeonimage-subquestion" style="left:60px;top:370px"><input readonly value="Review"></div>
     </div></div><div class="qtype-clozeonimage-view-controls">
     <button type="button" class="btn btn-link btn-sm p-0 mt-2" data-action="clozeonimage-toggle-panorama"
-        data-normal-label="Wide view" data-panorama-label="Exit wide view" aria-controls="coi-viewport"
-        aria-pressed="false" hidden>Wide view</button></div>
+        data-normal-label="Framed view" data-panorama-label="Exit framed view" aria-controls="coi-viewport"
+        aria-pressed="false" hidden>Framed view</button></div>
     <button type="button">Check</button><button type="button">Try again</button></div></div></div></form>
     <div style="height:1000px"></div></div></div></div></div></body></html>`;
 
@@ -468,7 +468,7 @@ for (const directory of ['src', 'build']) {
                     await page.keyboard.press(cycle % 2 ? 'Space' : 'Enter');
                     await settle(page);
                     assert.equal(await page.locator(toggleSelector).getAttribute('aria-pressed'), 'true');
-                    assert.equal(await page.locator(toggleSelector).textContent(), 'Exit wide view');
+                    assert.equal(await page.locator(toggleSelector).textContent(), 'Exit framed view');
                     assert.ok(await page.locator(toggleSelector).evaluate(element => element === document.activeElement));
                     assert.equal(await page.locator('.qtype-clozeonimage-panorama-track').count(), 1);
                     assert.equal(await page.locator('.qtype-clozeonimage-panorama-anchor').count(), 1);
@@ -666,11 +666,11 @@ for (const directory of ['src', 'build']) {
             const toggle = page.locator(toggleSelector).first();
             const stored = () => page.evaluate(key => sessionStorage.getItem(key), wideKey(101));
             await navigate('attempt.php?attempt=101');
-            assert.equal(await toggle.textContent(), 'Wide view');
+            assert.equal(await toggle.textContent(), 'Framed view');
             assert.equal(await toggle.getAttribute('aria-pressed'), 'false');
             await toggle.click();
             await settle(page);
-            assert.equal(await toggle.textContent(), 'Exit wide view');
+            assert.equal(await toggle.textContent(), 'Exit framed view');
             assert.equal(await stored(), '1');
             await page.reload();
             await initialise();

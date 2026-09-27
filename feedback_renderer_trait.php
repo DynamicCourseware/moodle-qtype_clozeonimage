@@ -112,7 +112,12 @@ trait qtype_clozeonimage_feedback_renderer_trait {
         }
 
         $marktext = '';
-        if ($options->marks == question_display_options::MAX_ONLY && $subq->defaultmark > 0) {
+        // Showing earned marks also permits the maximum while no current result exists yet.
+        if (
+            ($options->marks == question_display_options::MAX_ONLY ||
+                ($options->marks == question_display_options::MARK_AND_MAX && !$this->hascurrentresult)) &&
+                $subq->defaultmark > 0
+        ) {
             $marktext = get_string('markedoutofmax', 'question', format_float($subq->defaultmark, $options->markdp));
         } else if (
             $options->marks == question_display_options::MARK_AND_MAX &&

@@ -20,7 +20,7 @@
  * @copyright  2026 DynamicCourseware.org (Dominique Bauer)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-define(['theme_boost/index'], function(Bootstrap) {
+define(['theme_boost/index', 'theme_boost/loader'], function(Bootstrap) {
 
     'use strict';
 
@@ -60,6 +60,7 @@ define(['theme_boost/index'], function(Bootstrap) {
     let transientTrigger = null;
     let pinnedTrigger = null;
     let dismissedTrigger = null;
+    const ownedPopovers = new WeakSet();
 
     /**
      * Hide one feedback popover and optionally remove focus from its trigger.
@@ -163,7 +164,13 @@ define(['theme_boost/index'], function(Bootstrap) {
      */
     const initialisePopovers = () => {
         document.querySelectorAll(triggerSelector).forEach(trigger => {
-            Bootstrap.Popover.getOrCreateInstance(trigger);
+            const existing = Bootstrap.Popover.getInstance(trigger);
+            if (existing && !ownedPopovers.has(existing)) {
+                // Boost's loader forces focus-only triggers. Replace only our own controls' instances,
+                // after that loader has run, so their rendered hover/focus attributes take effect.
+                existing.dispose();
+            }
+            ownedPopovers.add(Bootstrap.Popover.getOrCreateInstance(trigger));
         });
     };
 
@@ -229,6 +236,11 @@ define(['theme_boost/index'], function(Bootstrap) {
         document.addEventListener('click', event => {
             dismissedTrigger = null;
             const trigger = event.target.closest(triggerSelector);
+            const label = event.target.closest('label');
+            if (trigger && label?.control && !label.control.disabled && !label.control.contains(event.target)) {
+                // The label's default action forwards a second click to its input. Pin/toggle only once.
+                return;
+            }
 
             if (pinnedTrigger) {
                 const previouslyPinned = pinnedTrigger;
@@ -278,6 +290,7 @@ define(['theme_boost/index'], function(Bootstrap) {
             }
         });
 
+        // Capture before Boost's delegated Escape handler removes the popover's visible state.
         document.addEventListener('keydown', event => {
             if (event.key !== 'Escape') {
                 return;
@@ -296,7 +309,7 @@ define(['theme_boost/index'], function(Bootstrap) {
             event.preventDefault();
             dismissedTrigger = trigger;
             close(trigger);
-        });
+        }, true);
     };
 
     return {init};

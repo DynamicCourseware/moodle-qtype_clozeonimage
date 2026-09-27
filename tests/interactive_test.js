@@ -272,7 +272,7 @@ test('editable choice panels and Clear share the Moodle focus presentation', () 
 });
 
 for (const directory of ['src', 'build']) {
-    test(`${directory}: feedback declares the Moodle 5.2-compatible Bootstrap dependency`, () => {
+    test(`${directory}: feedback waits for the Moodle 5.2-compatible Bootstrap loader`, () => {
         const dom = new JSDOM('', {runScripts: 'outside-only'});
         try {
             let dependencies;
@@ -283,7 +283,7 @@ for (const directory of ['src', 'build']) {
             const filename = directory === 'build' ? 'feedback.min.js' : 'feedback.js';
             runInContext(readFileSync(path.join(__dirname, '..', 'amd', directory, filename), 'utf8'),
                 dom.getInternalVMContext());
-            assert.deepEqual(dependencies, ['theme_boost/index']);
+            assert.deepEqual(dependencies, ['theme_boost/index', 'theme_boost/loader']);
         } finally {
             dom.window.close();
         }

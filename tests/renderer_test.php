@@ -198,15 +198,26 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
     }
 
     /**
-     * Assert that rendered output contains no feedback-popover trigger markup.
+     * Assert that ungraded controls expose only their maximum, without a premature or retained result.
      *
      * @param \DOMXPath $xpath XPath for the rendered output.
      */
-    private function assert_no_feedback_trigger_markup(\DOMXPath $xpath): void {
-        $this->assertCount(0, $xpath->query('//*[@data-bs-toggle="popover"]'));
-        $this->assertCount(0, $xpath->query('//*[@data-bs-content]'));
-        $this->assertCount(0, $xpath->query('//*[contains(concat(" ", normalize-space(@class), " "), ' .
-            '" feedbacktrigger ")]'));
+    private function assert_maximum_only_feedback(\DOMXPath $xpath): void {
+        $controls = $xpath->query('//*[contains(concat(" ", normalize-space(@class), " "), ' .
+            '" qtype-clozeonimage-subquestion ")]');
+        $subquestions = array_values($this->get_question_attempt()->get_question()->subquestions);
+        $this->assertCount(count($subquestions), $controls);
+        foreach ($controls as $index => $control) {
+            $triggers = $xpath->query('.//*[@data-bs-toggle="popover"]', $control);
+            $this->assertCount(1, $triggers);
+            $this->assertSame('hover focus', $triggers->item(0)->getAttribute('data-bs-trigger'));
+            $this->assertSame(
+                get_string('markedoutofmax', 'question', format_float($subquestions[$index]->defaultmark,
+                    $this->displayoptions->markdp)),
+                trim(strip_tags($triggers->item(0)->getAttribute('data-bs-content')))
+            );
+        }
+        $this->assert_no_semantic_result($xpath);
     }
 
     /**
@@ -546,7 +557,7 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
         }
         $this->assertCount(0, $xpath->query('//*[contains(concat(" ", normalize-space(@class), " "), ' .
             '" qtype-clozeonimage-review-surface ")]'));
-        $this->assertCount(0, $xpath->query('//*[@data-bs-toggle="popover"]'));
+        $this->assert_maximum_only_feedback($xpath);
         $this->assertCount(0, $xpath->query('//img[contains(@src, "grade_")]'));
     }
 
@@ -1260,7 +1271,7 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
     }
 
     /**
-     * Editable controls whose retained responses must not create mark-only feedback popovers.
+     * Editable controls whose retained responses expose the maximum without disclosing an earned mark.
      *
      * @return array<string, array{string,array<string,string>,string}>
      */
@@ -1273,7 +1284,7 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
     }
 
     #[\PHPUnit\Framework\Attributes\DataProvider('editable_answer_entry_feedback_provider')]
-    public function test_editable_answer_entry_suppresses_mark_only_feedback_popover(
+    public function test_editable_answer_entry_exposes_maximum_without_earned_mark(
         string $subquestiontype,
         array $response,
         string $controlxpath
@@ -1298,7 +1309,7 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
         $this->assertCount(1, $controls);
         $this->assertFalse($controls->item(0)->hasAttribute('readonly'));
         $this->assertFalse($controls->item(0)->hasAttribute('disabled'));
-        $this->assert_no_feedback_trigger_markup($xpath);
+        $this->assert_maximum_only_feedback($xpath);
     }
 
     /**
@@ -1344,11 +1355,12 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
             }
             $input = $xpath->query('//input[@type="text"]')->item(0);
             $popup = $input->getAttribute('data-bs-content');
-            $this->assertSame($marks === \question_display_options::MAX_ONLY, str_contains(
+            $currentresult = in_array($stage, ['checked', 'exhausted', 'review']);
+            $this->assertSame($marks === \question_display_options::MAX_ONLY ||
+                ($marks === \question_display_options::MARK_AND_MAX && !$currentresult), str_contains(
                 $popup,
                 get_string('markedoutofmax', 'question', format_float(1, $options->markdp))
             ));
-            $currentresult = in_array($stage, ['checked', 'exhausted', 'review']);
             $this->assertSame($marks === \question_display_options::MARK_AND_MAX && $currentresult, str_contains(
                 $popup,
                 get_string('markoutofmax', 'question', (object) [
@@ -1412,7 +1424,7 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
         $this->assertFalse($input->hasAttribute('readonly'));
         $this->assertFalse($input->hasAttribute('disabled'));
         $this->assertFalse($input->hasAttribute('data-clozeonimage-awaiting-retry'));
-        $this->assert_no_feedback_trigger_markup($xpath);
+        $this->assert_maximum_only_feedback($xpath);
 
         $this->finish();
         $this->render();
@@ -1524,7 +1536,7 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
         $this->start_attempt_at_question($question, 'interactive', 1);
 
         $this->render();
-        $this->assert_no_feedback_trigger_markup($this->xpath($this->currentoutput));
+        $this->assert_maximum_only_feedback($this->xpath($this->currentoutput));
 
         $this->process_submission($wrongresponse + ['-submit' => 1]);
         $options = $this->adjusted_display_options();
@@ -1556,7 +1568,7 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
         foreach ($controls as $control) {
             $this->assertFalse($control->hasAttribute('disabled'));
         }
-        $this->assert_no_feedback_trigger_markup($xpath);
+        $this->assert_maximum_only_feedback($xpath);
         $this->assertCount(0, $xpath->query('//button[contains(concat(" ", normalize-space(@class), " "), ' .
             '" qtype-clozeonimage-review-surface ")]'));
 
@@ -1610,7 +1622,7 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
 
         $this->render();
         $xpath = $this->xpath($this->currentoutput);
-        $this->assert_no_feedback_trigger_markup($xpath);
+        $this->assert_maximum_only_feedback($xpath);
         $this->assertCount(6, $xpath->query(
             '//input[@data-role="clozeonimage-multichoice-choice" and not(@disabled)]'
         ));
@@ -1839,7 +1851,7 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
         );
 
         $this->render();
-        $this->assert_no_feedback_trigger_markup($this->xpath($this->currentoutput));
+        $this->assert_maximum_only_feedback($this->xpath($this->currentoutput));
 
         $this->process_submission($response + ['-submit' => 1]);
         $this->displayoptions->correctness = true;
@@ -1959,7 +1971,7 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
         $this->displayoptions->feedback = false;
         $this->render();
         $xpath = $this->xpath($this->currentoutput);
-        $this->assert_no_feedback_trigger_markup($xpath);
+        $this->assert_maximum_only_feedback($xpath);
         $this->assertCount(1, $xpath->query(
             '//input[@data-role="clozeonimage-multichoice-choice" and @value="2" and @checked]'
         ));
@@ -2008,6 +2020,71 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
             }
         }
         return $cases;
+    }
+
+    /**
+     * Ungraded and genuinely awarded zero/full marks in every control family and supported behaviour.
+     *
+     * @return array<string, array{string,string,string,array<string,int|string>}>
+     */
+    public static function maximum_mark_fallback_provider(): array {
+        return array_filter(self::unified_result_provider(), static fn(array $case): bool => $case[2] !== 'partiallycorrect');
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('maximum_mark_fallback_provider')]
+    public function test_maximum_mark_fallback_before_grading(
+        string $behaviour,
+        string $type,
+        string $state,
+        array $response
+    ): void {
+        $question = $this->make_question(\qtype_clozeonimage::CONTROL_APPEARANCE_TRANSLUCENT, $type);
+        $question->subquestions[1]->defaultmark = 2.5;
+        if (str_starts_with($type, 'multichoice')) {
+            // The core fixture uses a negative distractor; explicitly exercise an awarded zero here.
+            $question->subquestions[1]->answers[15]->fraction = 0;
+        }
+        if (str_starts_with($type, 'multichoice') || str_starts_with($type, 'multiresponse')) {
+            $question->subquestions[1]->shuffleanswers = false;
+        }
+        $this->start_attempt_at_question($question, $behaviour, 2.5);
+        $this->displayoptions->correctness = false;
+        $this->displayoptions->feedback = false;
+        $this->displayoptions->rightanswer = false;
+        $this->displayoptions->markdp = 3;
+        $submission = $response;
+        if (str_contains($behaviour, 'cbm')) {
+            $submission['-certainty'] = 2;
+        }
+        foreach (['initial', 'saved', 'graded'] as $stage) {
+            if ($stage === 'saved') {
+                $this->process_submission($submission);
+            } else if ($stage === 'graded') {
+                if (str_starts_with($behaviour, 'deferred')) {
+                    $this->finish();
+                } else {
+                    $this->process_submission($submission + ['-submit' => 1]);
+                }
+            }
+            foreach ([\question_display_options::MAX_ONLY, \question_display_options::MARK_AND_MAX] as $marks) {
+                $this->displayoptions->marks = $marks;
+                $this->render();
+                $xpath = $this->xpath($this->currentoutput);
+                $triggers = $xpath->query('//*[contains(@class, "qtype-clozeonimage-feedback-trigger")]');
+                $this->assertCount(1, $triggers, $stage . ': both marks modes must provide a popover');
+                $trigger = $triggers->item(0);
+                $this->assertSame('popover', $trigger->getAttribute('data-bs-toggle'));
+                $this->assertSame('hover focus', $trigger->getAttribute('data-bs-trigger'));
+                $maxtext = get_string('markedoutofmax', 'question', format_float(2.5, 3));
+                $marktext = get_string('markoutofmax', 'question', (object) [
+                    'mark' => format_float($state === 'correct' ? 2.5 : 0, 3),
+                    'max' => format_float(2.5, 3),
+                ]);
+                $expected = $stage === 'graded' && $marks === \question_display_options::MARK_AND_MAX ? $marktext : $maxtext;
+                $this->assertSame($expected, trim(strip_tags($trigger->getAttribute('data-bs-content'))));
+                $this->assert_no_semantic_result($xpath);
+            }
+        }
     }
 
     /**
@@ -2151,7 +2228,7 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
         $this->render();
         // CBM's native certainty-help popover is ancillary, not a subquestion result.
         $xpath = $this->xpath($this->currentoutput);
-        $this->assertCount(0, $xpath->query('//*[contains(@class, "qtype-clozeonimage-feedback-trigger")]'));
+        $this->assert_maximum_only_feedback($xpath);
         $this->assertCount(0, $xpath->query('//*[contains(@class, "qtype-clozeonimage-state-")]'));
 
         // Keep the composite incorrect so Interactive offers another try, even for a correct local answer.
@@ -2195,7 +2272,7 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
             $this->process_submission(['-tryagain' => 1]);
             $this->render();
             $xpath = $this->xpath($this->currentoutput);
-            $this->assert_no_feedback_trigger_markup($xpath);
+            $this->assert_maximum_only_feedback($xpath);
             $this->assertCount(0, $xpath->query('//*[contains(@class, "qtype-clozeonimage-state-")]'));
 
             // Exhaust the final try and verify the same model on locked results.
