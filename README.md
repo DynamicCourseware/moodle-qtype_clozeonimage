@@ -20,7 +20,7 @@ The background image and positioned answer controls together form the question c
 - **Translucent** or **Opaque** backgrounds for positioned controls and related feedback surfaces.
 - Optional formatted **Text after image**.
 - Standard Moodle attempt, grading, feedback, and review behaviour.
-- Optional **Framed view** for horizontally navigating a composition without scaling the image or answer controls.
+- Optional **Framed view** that clearly encloses the composition, keeps it clear of the right drawer, and prevents it from overlapping surrounding page content.
 - Keyboard access to the framed viewport, with visible focus and Escape handling.
 - Moodle backup and restore support.
 - Moodle XML import and export support.
@@ -65,7 +65,7 @@ A typical authoring workflow is:
 1. Enter the **Question name** and the **Question text** containing the instructions or other information to appear before the image.
 2. Upload one background **Image**.
 3. Review or change the **Image width (px)** and select the **Control appearance**.
-4. Enter one complete Moodle Cloze expression in each populated **Cloze subquestion source** row.
+4. For each subquestion, enter one complete Moodle Cloze expression in a separate **Cloze subquestion source** field.
 5. Click **Update preview** to render the corresponding Moodle answer controls.
 6. Position each control by dragging it in the preview or by editing its **Left** and **Top** coordinates.
 7. Select an appropriate **Anchor** for each control.
@@ -187,10 +187,10 @@ Short Answer and Numerical controls use their normal calculated Cloze width. Clo
 
 ## Framed view
 
-In attempts, question previews, and review, the **Framed view** button below the composition switches from the normal layout to a horizontally scrollable frame. The image and answer controls retain their sizes and positions relative to one another. This is a viewing option, not an authoring setting or a zoom control.
+In attempts, question previews, and review, the **Framed view** button below the composition places the image and all answer controls in a clearly defined frame dedicated to the composition. The frame stays within the available page width and remains unobstructed by the right drawer. Controls positioned outside the image are contained within the frame, so they do not overlap the question information block or other surrounding page elements. The entire composition remains accessible through horizontal scrolling when needed.
 
 - Use the horizontal scrollbar, or drag the background image, to move the composition horizontally. Answer controls retain their normal interactions.
-- The frame adjusts to the available browser width and Moodle drawers. The image itself is not rescaled.
+- The frame adjusts to the available browser width and Moodle drawers.
 - Activating Framed view also frames other Cloze on Image questions on the current page when they cause horizontal page overflow.
 - **Exit framed view** returns all currently framed questions on the page to the normal layout.
 - During an active quiz attempt, the choice is remembered per question in the browser tab's session storage, including navigation between quiz pages and reloads. Review, question preview, and a new attempt do not inherit the previous attempt's stored choice.
