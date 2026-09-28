@@ -2,6 +2,8 @@
 
 **Cloze on Image** (`qtype_clozeonimage`) is a Moodle question type that places standard Moodle Cloze subquestions directly over or around a background image.
 
+**Version 1.0.0** — see [release notes](CHANGELOG.md).
+
 It is intended for questions in which the position of an answer field relative to an image is important. The answer controls remain ordinary Moodle Cloze controls, so standard Short Answer, Numerical, Multichoice, Multiple Response, grading, feedback, and review behaviour are retained.
 
 The background image and positioned answer controls together form the question composition. Cloze on Image does not draw arrows, lines, rectangles, labels, or other graphics; any such content must be prepared as part of the background image.
@@ -18,15 +20,19 @@ The background image and positioned answer controls together form the question c
 - **Translucent** or **Opaque** backgrounds for positioned controls and related feedback surfaces.
 - Optional formatted **Text after image**.
 - Standard Moodle attempt, grading, feedback, and review behaviour.
+- Optional **Framed view** for horizontally navigating a composition without scaling the image or answer controls.
+- Keyboard access to the framed viewport, with visible focus and Escape handling.
 - Moodle backup and restore support.
 - Moodle XML import and export support.
 - Moodle question copying and versioning support.
 
 ## Requirements
 
-The plugin metadata currently requires Moodle 5.2 or later.
+Moodle 5.2 or later is required, together with Moodle's standard **Embedded answers (Cloze)** question type (`qtype_multianswer`). Both minimum version numbers are `2026042000` in `version.php`.
 
 The current version has been tested with Moodle 5.2.2+ (Build: 20260818) and Moodle 5.3 development builds (Build: 20260818).
+
+Testing against a Moodle 5.3 development build does not establish compatibility with the eventual final Moodle 5.3 release. Framed view browser checks have used Chromium and the Boost stylesheets from the test installations; other themes and browsers need their own checks.
 
 No external library, service, or third-party Moodle plugin is required.
 
@@ -36,9 +42,13 @@ No external library, service, or third-party Moodle plugin is required.
 
    `question/type/clozeonimage`
 
+   This path is relative to Moodle's web root. For installations with a `public` directory, use `public/question/type/clozeonimage`.
+
 2. Go to **Site administration > Notifications**, or run Moodle's normal command-line upgrade process.
 3. Complete the installation.
 4. In a question bank, create a new question and select **Cloze on Image**.
+
+When upgrading from a development version, complete Moodle's upgrade process after replacing the plugin files. Version 1.0.0 increases the plugin version number; it introduces no additional database schema change beyond the existing development upgrade steps.
 
 ## Creating a question
 
@@ -175,6 +185,24 @@ Moodle's normal grading, validation, correctness, feedback, and review behaviour
 
 Short Answer and Numerical controls use their normal calculated Cloze width. Cloze on Image does not provide a separate author-defined width setting for individual answer controls.
 
+## Framed view
+
+In attempts, question previews, and review, the **Framed view** button below the composition switches from the normal layout to a horizontally scrollable frame. The image and answer controls retain their sizes and positions relative to one another. This is a viewing option, not an authoring setting or a zoom control.
+
+- Use the horizontal scrollbar, or drag the background image, to move the composition horizontally. Answer controls retain their normal interactions.
+- The frame adjusts to the available browser width and Moodle drawers. The image itself is not rescaled.
+- Activating Framed view also frames other Cloze on Image questions on the current page when they cause horizontal page overflow.
+- **Exit framed view** returns all currently framed questions on the page to the normal layout.
+- During an active quiz attempt, the choice is remembered per question in the browser tab's session storage, including navigation between quiz pages and reloads. Review, question preview, and a new attempt do not inherit the previous attempt's stored choice.
+
+### Keyboard navigation and Escape
+
+Activate the button with the keyboard to move focus into the frame. The frame has an accessible name and a visible focus outline; native keyboard scrolling is available while it is focused. Tab continues to the answer controls.
+
+Escape dismisses an open feedback popover before exiting Framed view. Press Escape again to exit the framed questions on the current page. When no popover is open, one press exits. Focus in an answer is preserved, with its vertical position compensated where scrolling limits allow. If the frame itself has focus, focus moves to the first available answer, or to the local view button when no answer can receive focus.
+
+Framed view requires JavaScript. If session storage is unavailable, switching views still works on the current page.
+
 ## Text before and after the image
 
 The standard Moodle **Question text** is displayed before the image.
@@ -200,6 +228,8 @@ Cloze on Image includes several accessibility measures:
 - The nine Anchor positions have meaningful names rather than relying only on their visual 3 × 3 arrangement.
 - Validation diagnostics preserve row identification for screen readers.
 - Student answer fields remain native Moodle form controls.
+- Framed view provides a named, keyboard-focusable scrolling region with a visible focus outline.
+- View transitions and Escape handling preserve or restore an appropriate focus target.
 
 The background image has a generic alternative identifying its role as the background image for a Cloze on Image question, but this does not describe the content of an arbitrary diagram. Because Cloze on Image questions can inherently depend on spatial relationships, authors should include essential equivalent information in **Question text** whenever possible. Where interpreting those spatial relationships is itself the learning outcome and cannot reasonably be represented equivalently, an alternative assessment path may be appropriate.
 
@@ -212,7 +242,7 @@ Current limitations include:
 - Each subquestion row accepts one complete Cloze expression only.
 - Text immediately before or after an individual positioned Cloze control is not supported.
 - No separate author-defined width setting is provided for individual Short Answer or Numerical controls.
-- The layout uses pixel-based positioning and does not continuously rescale a saved composition to the browser window. It may not adapt optimally to every narrow screen or heavily customized Moodle theme.
+- The layout uses pixel-based positioning and does not continuously rescale a saved composition to the browser window. Framed view provides horizontal navigation; authors should still check their questions on narrow screens and with their site's theme.
 - Controls can intentionally extend outside the image and may overlap one another or surrounding content if positioned poorly.
 - The generic image alternative identifies the image's role but does not replace an equivalent textual description of essential visual information.
 - Creating questions requires familiarity with Moodle Cloze syntax.
@@ -228,6 +258,8 @@ Bugs and feature requests can be reported through the [GitHub issue tracker](htt
 ## License
 
 This plugin is distributed under the **GNU General Public License v3 or later**.
+
+See [COPYING.txt](COPYING.txt) for the full license. Files adapted from Moodle core retain their original copyright notices alongside the notices for Cloze on Image modifications.
 
 Copyright © 2026 DynamicCourseware.org.
 
