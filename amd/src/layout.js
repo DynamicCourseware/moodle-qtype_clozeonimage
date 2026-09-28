@@ -43,6 +43,7 @@ define([], function() {
     let frame = 0;
     const transitions = new Map();
     let geometryObserver;
+    let modePositionFrame = 0;
 
     /**
      * Permit session persistence only in Moodle's active quiz response form.
@@ -355,7 +356,8 @@ define([], function() {
         viewport.addEventListener('pointerdown', event => {
             const interactive = event.target.closest(interactiveSelector);
             if (event.button !== 0 || !event.isPrimary || event.target !== image ||
-                    (interactive && viewport.contains(interactive)) || viewport.scrollWidth <= viewport.clientWidth) {
+                    (interactive && interactive !== viewport && viewport.contains(interactive)) ||
+                    viewport.scrollWidth <= viewport.clientWidth) {
                 return;
             }
             suppressClick = false;
@@ -535,6 +537,11 @@ define([], function() {
         const initialLeft = image.getClientRects().length ? image.getBoundingClientRect().left : null;
         const direction = window.getComputedStyle(composition).direction;
         const restoreViewport = saveStyles(viewport, ['width', 'margin-left']);
+        const viewportAttributes = ['tabindex', 'role', 'aria-label'].map(name => [name, viewport.getAttribute(name)]);
+        viewport.setAttribute('tabindex', '0');
+        viewport.setAttribute('role', 'region');
+        // Reuse the server-localized mode name without changing the toggle's current action.
+        viewport.setAttribute('aria-label', question.querySelector(toggleSelector).dataset.normalLabel);
         const restoreComposition = saveStyles(composition, ['direction', 'margin-left', 'margin-top']);
         const anchor = document.createElement('div');
         anchor.className = 'qtype-clozeonimage-panorama-anchor';
@@ -551,7 +558,7 @@ define([], function() {
             boundsElements: new Set(),
             storageKey: attemptStorageKey(question),
             questionKey: questionStateKey(question),
-            restoreViewport, restoreComposition};
+            restoreViewport, restoreComposition, viewportAttributes};
         state.stopDrag = enableDrag(viewport, image, composition, state);
         panoramas.set(composition, state);
         storedWideView(state.storageKey, true);
@@ -565,7 +572,8 @@ define([], function() {
         }
         geometryObserver?.observe(composition);
         // Eliminate an old normal-view document scroll offset before measuring screen bounds.
-        window.scrollTo(0, window.scrollY);
+        // Boost enables smooth root scrolling; this reset must finish before geometry and toggle anchoring.
+        window.scrollTo({left: 0, top: window.scrollY, behavior: 'instant'});
         if (focused?.isConnected && document.activeElement !== focused) {
             focused.focus({preventScroll: true});
         }
@@ -654,8 +662,8 @@ define([], function() {
         if (!state) {
             return;
         }
-        const focused = document.activeElement;
         const {question, viewport, anchor, track} = state;
+        const focused = document.activeElement;
         state.stopDrag();
         viewport.scrollLeft = 0;
         track.before(composition);
@@ -664,6 +672,13 @@ define([], function() {
         anchor.remove();
         state.restoreViewport();
         state.restoreComposition();
+        state.viewportAttributes.forEach(([name, value]) => {
+            if (value === null) {
+                viewport.removeAttribute(name);
+            } else {
+                viewport.setAttribute(name, value);
+            }
+        });
         viewport.classList.remove('qtype-clozeonimage-panorama', 'qtype-clozeonimage-panorama-can-drag');
         question.classList.remove(activeClass);
         if (!remember) {
@@ -685,11 +700,61 @@ define([], function() {
             schedulePanoramas();
         }
         if (!remember) {
-            window.scrollTo(0, window.scrollY);
+            window.scrollTo({left: 0, top: window.scrollY, behavior: 'instant'});
         }
-        if (focused?.isConnected && document.activeElement !== focused) {
+        if (focused !== viewport && focused?.isConnected && document.activeElement !== focused) {
             focused.focus({preventScroll: true});
         }
+    };
+
+    /**
+     * Position only explicit transitions, after queued geometry and resize-observer work has rendered.
+     * A newer mode action supersedes pending positioning; restoration/AJAX never schedules it.
+     *
+     * @param {Function} callback Position/focus work for the latest user action.
+     */
+    const afterModeLayout = callback => {
+        window.cancelAnimationFrame(modePositionFrame);
+        modePositionFrame = window.requestAnimationFrame(() => {
+            modePositionFrame = window.requestAnimationFrame(() => {
+                modePositionFrame = 0;
+                callback();
+            });
+        });
+    };
+
+    /**
+     * Find a native answer in DOM/tab order, excluding hidden sentinels and auxiliary controls.
+     *
+     * @param {HTMLElement} question Question returning to Normal view.
+     * @returns {HTMLElement|undefined} First available native answer (readonly text remains eligible).
+     */
+    const firstAnswer = question => {
+        const answers = [...question.querySelectorAll('.qtype-clozeonimage-subquestion input, ' +
+            '.qtype-clozeonimage-subquestion select, .qtype-clozeonimage-subquestion textarea')]
+            .filter(element => !element.matches(':disabled, [type="hidden"], [type="button"], [type="submit"], ' +
+                '[type="reset"], [type="image"]') && element.tabIndex >= 0 && visibleRect(element) &&
+                !element.closest('[inert], .qtype-clozeonimage-clear-choice, .qtype-clozeonimage-review-surface'));
+        return answers.find(element => element.type !== 'radio' || !element.name || element.checked ||
+            !answers.some(other => other.type === 'radio' && other.name === element.name &&
+                other.form === element.form && other.checked));
+    };
+
+    /**
+     * Compensate only the visual Y displacement caused by mode reflow, including nested page scrollers.
+     * Native scroll limits still apply; no animation or horizontal repositioning is introduced here.
+     *
+     * @param {HTMLElement} element Persistent focused control.
+     * @param {Number} top Its viewport Y before exit.
+     */
+    const preserveVerticalContext = (element, top) => {
+        for (let parent = element.parentElement; parent && parent !== document.scrollingElement;
+                parent = parent.parentElement) {
+            if (parent.scrollHeight > parent.clientHeight && /auto|scroll/.test(getComputedStyle(parent).overflowY)) {
+                parent.scrollBy({top: element.getBoundingClientRect().top - top, behavior: 'instant'});
+            }
+        }
+        window.scrollBy({top: element.getBoundingClientRect().top - top, behavior: 'instant'});
     };
 
     /** Exit all rendered Wide questions; absent quiz pages retain their own attempt state. */
@@ -715,11 +780,22 @@ define([], function() {
             const question = button.closest('.que.clozeonimage');
             const composition = question?.querySelector(runtimeCompositionSelector);
             if (composition) {
-                if (panoramas.has(composition)) {
+                const entering = !panoramas.has(composition);
+                if (!entering) {
                     exitPanoramas();
                 } else {
                     requestPanorama(composition);
                 }
+                afterModeLayout(() => {
+                    if (!button.isConnected || panoramas.has(composition) !== entering) {
+                        return;
+                    }
+                    button.scrollIntoView({block: 'end', inline: 'nearest', behavior: 'instant'});
+                    // Native keyboard/assistive activation has no pointer click count.
+                    if (entering && event.detail === 0 && document.activeElement === button) {
+                        panoramas.get(composition)?.viewport.focus({preventScroll: true});
+                    }
+                });
             }
         });
         // Window bubbling runs after document-level feedback handlers, regardless of AMD load order.
@@ -729,7 +805,26 @@ define([], function() {
             }
             if ([...panoramas.keys()].some(composition => composition.isConnected)) {
                 event.preventDefault();
+                const focused = document.activeElement;
+                const focusedFrame = [...panoramas.values()].find(state => state.viewport === focused);
+                const top = focused.getBoundingClientRect().top;
                 exitPanoramas();
+                const restoreContext = () => {
+                    if (focusedFrame?.question.isConnected &&
+                            [focused, document.body].includes(document.activeElement)) {
+                        // All-disabled review questions fall back to the local toggle, without end-aligning it.
+                        const target = firstAnswer(focusedFrame.question) || focusedFrame.question.querySelector(toggleSelector);
+                        target.focus({preventScroll: true});
+                        target.scrollIntoView({block: 'nearest', inline: 'nearest', behavior: 'instant'});
+                    } else if (focused.isConnected && focused !== document.body && document.activeElement === focused) {
+                        preserveVerticalContext(focused, top);
+                    }
+                };
+                // Compensate the synchronous Info reflow before paint, then check once after layout work settles.
+                if (!focusedFrame) {
+                    restoreContext();
+                }
+                afterModeLayout(restoreContext);
             }
         });
         const lifecycle = new window.MutationObserver(records => {

@@ -17,7 +17,12 @@
 /**
  * Shared review-state and feedback-popover rendering for positioned controls.
  *
+ * Adapted from Moodle core question/type/multianswer/renderer.php.
+ * Modifications for Cloze on Image copyright 2026 DynamicCourseware.org.
+ *
  * @package    qtype_clozeonimage
+ * @copyright  2010 Pierre Pichet
+ * @copyright  2011 The Open University
  * @copyright  2026 DynamicCourseware.org (Dominique Bauer)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */

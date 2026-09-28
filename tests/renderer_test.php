@@ -212,8 +212,10 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
             $this->assertCount(1, $triggers);
             $this->assertSame('hover focus', $triggers->item(0)->getAttribute('data-bs-trigger'));
             $this->assertSame(
-                get_string('markedoutofmax', 'question', format_float($subquestions[$index]->defaultmark,
-                    $this->displayoptions->markdp)),
+                get_string('markedoutofmax', 'question', format_float(
+                    $subquestions[$index]->defaultmark,
+                    $this->displayoptions->markdp
+                )),
                 trim(strip_tags($triggers->item(0)->getAttribute('data-bs-content')))
             );
         }
@@ -321,9 +323,11 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
         $this->assertSame(get_string('exitpanoramicview', 'qtype_clozeonimage'), $button->getAttribute('data-panorama-label'));
         $viewport = $xpath->query('//div[@class="qtype-clozeonimage-scroll"]')->item(0);
         $qa = $this->get_question_attempt();
-        $this->assertSame('qtype_clozeonimage:wide:v1:' . sha1($CFG->wwwroot) .
+        $this->assertSame(
+            'qtype_clozeonimage:wide:v1:' . sha1($CFG->wwwroot) .
             ':usage:' . $qa->get_usage_id() . ':slot:' . $qa->get_slot() . ':question:' . $qa->get_question_id(),
-            $viewport->getAttribute('data-wide-key'));
+            $viewport->getAttribute('data-wide-key')
+        );
         $this->assertSame($viewport->getAttribute('id'), $button->getAttribute('aria-controls'));
         $this->assertSame('qtype-clozeonimage-view-controls', $viewport->nextSibling->getAttribute('class'));
     }
@@ -1358,9 +1362,9 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
             $currentresult = in_array($stage, ['checked', 'exhausted', 'review']);
             $this->assertSame($marks === \question_display_options::MAX_ONLY ||
                 ($marks === \question_display_options::MARK_AND_MAX && !$currentresult), str_contains(
-                $popup,
-                get_string('markedoutofmax', 'question', format_float(1, $options->markdp))
-            ));
+                    $popup,
+                    get_string('markedoutofmax', 'question', format_float(1, $options->markdp))
+                ));
             $this->assertSame($marks === \question_display_options::MARK_AND_MAX && $currentresult, str_contains(
                 $popup,
                 get_string('markoutofmax', 'question', (object) [

@@ -469,7 +469,7 @@ for (const directory of ['src', 'build']) {
                     await settle(page);
                     assert.equal(await page.locator(toggleSelector).getAttribute('aria-pressed'), 'true');
                     assert.equal(await page.locator(toggleSelector).textContent(), 'Exit framed view');
-                    assert.ok(await page.locator(toggleSelector).evaluate(element => element === document.activeElement));
+                    assert.ok(await page.locator(scrollSelector).evaluate(element => element === document.activeElement));
                     assert.equal(await page.locator('.qtype-clozeonimage-panorama-track').count(), 1);
                     assert.equal(await page.locator('.qtype-clozeonimage-panorama-anchor').count(), 1);
                     assert.equal(await page.locator(toggleSelector).count(), 1);
@@ -490,7 +490,8 @@ for (const directory of ['src', 'build']) {
                     assert.equal(await page.locator('.qtype-clozeonimage-panorama-anchor').count(), 0);
                     assert.deepEqual(await normalMetrics(page), normal, 'Normal layout returns without cumulative geometry');
                     assert.deepEqual((await snapshot(page)).relative, relative);
-                    assert.ok(await page.locator(toggleSelector).evaluate(element => element === document.activeElement));
+                    const exitFocus = cycle === 1 ? page.locator('input').first() : page.locator(toggleSelector);
+                    assert.ok(await exitFocus.evaluate(element => element === document.activeElement));
                     assert.equal(await page.evaluate(() => window.scrollX), 0);
                     assert.deepEqual(await page.evaluate(() => ({...window.resourceCounts})), resources,
                         'Activation listeners and geometry observers are released on exit');
@@ -915,12 +916,13 @@ for (const directory of ['src', 'build']) {
                 }
                 const first = page.locator(toggleSelector).first();
                 await first.focus();
-                await first.evaluate(element => element.click());
+                await page.keyboard.press('Enter');
                 await settle(page);
                 const expected = owners.map((owner, index) => index === 0 || owner);
                 assert.deepEqual(await modeStates(page), expected, JSON.stringify(scenario));
                 assert.deepEqual(await allImageGeometry(page), geometry, 'All image/control coordinates remain unchanged');
-                assert.equal(await first.evaluate(element => document.activeElement === element), true, 'Focus stays local');
+                assert.equal(await page.locator(scrollSelector).first().evaluate(element => document.activeElement === element),
+                    true, 'Keyboard focus stays in the explicitly requested frame, not an automatic sibling');
                 assert.equal(await page.locator('.qtype-clozeonimage-panorama-track').count(), expected.filter(Boolean).length);
                 const overflow = (await snapshot(page)).overflow;
                 if (scenario.unrelated) {
@@ -1609,6 +1611,295 @@ for (const directory of ['src', 'build']) {
                 assert.equal((await snapshot(page)).overflow, 0);
                 assert.equal((await canvasMetrics(page.locator(scrollSelector))).verticalRange, 0);
             }
+        } finally {
+            await browser.close();
+        }
+    });
+}
+
+for (const directory of ['src', 'build']) {
+    test(`${directory}: framed viewport keyboard scrolling, naming and reversible focus attributes`, async() => {
+        const browser = await chromium.launch({headless: true});
+        try {
+            for (const width of [800, 1777]) {
+                const page = await browser.newPage({viewport: {width: 1440, height: 1000}});
+                await page.route(/^https?:/, route => route.abort());
+                await page.setContent(fixture(width));
+                await page.addStyleTag({path: process.env.COI_THEME_CSS});
+                await page.addStyleTag({path: path.join(__dirname, '../styles.css')});
+                // A text-field-only question must be scrollable independently of its answer's caret.
+                await page.evaluate(() => {
+                    document.querySelectorAll('.qtype-clozeonimage-subquestion').forEach((control, index) => {
+                        if (index) {
+                            control.remove();
+                        }
+                    });
+                });
+                await loadController(page, directory, 'layout');
+                await settle(page);
+                const viewport = page.locator(scrollSelector);
+                const answer = viewport.locator('input');
+                const flag = page.getByRole('button', {name: 'Flag', exact: true});
+                const toggle = page.locator(toggleSelector);
+                const attributes = () => viewport.evaluate(element =>
+                    ['tabindex', 'role', 'aria-label'].map(name => element.getAttribute(name)));
+                assert.deepEqual(await attributes(), [null, null, null]);
+                await flag.focus();
+                await page.keyboard.press('Tab');
+                assert.ok(await answer.evaluate(element => element === document.activeElement), 'Normal skips viewport');
+                const original = await snapshot(page);
+                for (const activation of ['Space', 'Enter', 'pointer']) {
+                    if (activation === 'pointer') {
+                        await toggle.click();
+                    } else {
+                        await toggle.focus();
+                        await page.keyboard.press(activation);
+                    }
+                    await settle(page);
+                    if (activation === 'pointer') {
+                        assert.ok(await toggle.evaluate(element => element === document.activeElement),
+                            'Pointer activation retains natural button focus');
+                    } else {
+                        assert.ok(await viewport.evaluate(element => element === document.activeElement),
+                            `${activation} activation focuses the frame`);
+                        await page.keyboard.press('Tab');
+                        assert.ok(await answer.evaluate(element => element === document.activeElement),
+                            'The next Tab reaches the first answer');
+                    }
+                    await flag.focus();
+                    await page.keyboard.press('Tab');
+                    assert.ok(await viewport.evaluate(element => element === document.activeElement), 'Tab reaches frame');
+                    assert.equal(await page.getByRole('region', {name: 'Framed view', exact: true}).count(), 1);
+                    const focusStyle = await viewport.evaluate(element => {
+                        const style = getComputedStyle(element);
+                        return {visible: element.matches(':focus-visible'), outline: parseFloat(style.outlineWidth),
+                            style: style.outlineStyle};
+                    });
+                    assert.ok(focusStyle.visible && focusStyle.outline > 0 && focusStyle.style !== 'none');
+                    await scrollTo(page, 0);
+                    await page.keyboard.press('ArrowRight');
+                    await settle(page);
+                    assert.ok((await snapshot(page)).scroll > 0, 'Native Right Arrow scrolls the frame');
+                    await page.keyboard.press('ArrowLeft');
+                    await settle(page);
+                    close((await snapshot(page)).scroll, 0, 'Native Left Arrow returns to start');
+                    await page.keyboard.press('Tab');
+                    assert.ok(await answer.evaluate(element => element === document.activeElement));
+                    await answer.evaluate(element => element.setSelectionRange(0, 0));
+                    await settle(page);
+                    const inputScroll = (await snapshot(page)).scroll;
+                    await page.keyboard.press('ArrowRight');
+                    await settle(page);
+                    assert.equal(await answer.evaluate(element => element.selectionStart), 1, 'Input retains caret keys');
+                    close((await snapshot(page)).scroll, inputScroll, 'Caret keys do not scroll the frame');
+                    const current = await snapshot(page);
+                    close(current.imageWidth, width, 'Teacher width unchanged');
+                    assert.deepEqual(current.relative, original.relative, 'Control coordinates unchanged');
+                    await page.keyboard.press('Shift+Tab');
+                    await page.keyboard.press('Escape');
+                    await settle(page);
+                    assert.deepEqual(await attributes(), [null, null, null]);
+                    assert.ok(await answer.evaluate(element => element === document.activeElement),
+                        'Escape from the frame focuses the first answer');
+                    assert.equal(await page.locator('.qtype-clozeonimage-panorama-track').count(), 0);
+                }
+                // Existing author/theme attributes must survive a cycle exactly, not just be removed.
+                await viewport.evaluate(element => {
+                    element.setAttribute('tabindex', '-1');
+                    element.setAttribute('role', 'group');
+                    element.setAttribute('aria-label', 'Original area');
+                });
+                await toggle.click();
+                await settle(page);
+                await toggle.click();
+                await settle(page);
+                assert.deepEqual(await attributes(), ['-1', 'group', 'Original area']);
+                await page.close();
+            }
+        } finally {
+            await browser.close();
+        }
+    });
+}
+
+/** Add real vertical travel around the questions so transition positioning is not document-end clamped. */
+const transitionPage = async(browser, directory, widths = [1777, 1600, 500]) => {
+    const page = await browser.newPage({viewport: {width: 1440, height: 800}});
+    await page.route(/^https?:/, route => route.abort());
+    await page.setContent(coordinatedFixture(301, false, widths));
+    await page.addStyleTag({path: process.env.COI_THEME_CSS});
+    await page.addStyleTag({path: path.join(__dirname, '../styles.css')});
+    await page.evaluate(() => {
+        document.querySelector('form').insertAdjacentHTML('beforebegin', '<div style="height:1400px"></div>');
+        document.querySelector('form').insertAdjacentHTML('afterend', '<div style="height:1600px"></div>');
+        document.querySelectorAll('.info').forEach(info => {
+            info.style.minHeight = '130px';
+        });
+    });
+    await loadController(page, directory, 'layout');
+    await settle(page);
+    return page;
+};
+const placeAt = async(locator, top) => {
+    await locator.evaluate((element, y) => window.scrollBy(0, element.getBoundingClientRect().top - y), top);
+};
+const assertBottomAnchor = async(page, toggle) => {
+    const distance = await toggle.evaluate(element => window.innerHeight - element.getBoundingClientRect().bottom);
+    assert.ok(Math.abs(distance) <= 3, `Local toggle near viewport bottom: gap ${distance}`);
+    const position = await page.evaluate(() => window.scrollY);
+    await settle(page);
+    close(await page.evaluate(() => window.scrollY), position, 'No delayed vertical drift');
+};
+
+for (const directory of ['src', 'build']) {
+    test(`${directory}: explicit mode transitions anchor the local toggle for keyboard and pointer`, async() => {
+        const browser = await chromium.launch({headless: true});
+        try {
+            const page = await transitionPage(browser, directory);
+            const question = page.locator('#question-coi-1');
+            const toggle = question.locator(toggleSelector);
+            const viewport = question.locator(scrollSelector);
+            const answer = question.locator('input').first();
+            const geometry = await allImageGeometry(page);
+            for (const activation of ['Space', 'Enter', 'pointer']) {
+                for (const top of [150, 550]) {
+                    await toggle.focus();
+                    await placeAt(toggle, top);
+                    if (activation === 'pointer') {
+                        await toggle.click();
+                    } else {
+                        await page.keyboard.press(activation);
+                    }
+                    await settle(page);
+                    assert.deepEqual(await modeStates(page), [true, true, false]);
+                    await assertBottomAnchor(page, toggle);
+                    assert.ok(await (activation === 'pointer' ? toggle : viewport)
+                        .evaluate(element => document.activeElement === element), 'Focus stays on the explicit question');
+                    if (activation !== 'pointer') {
+                        await page.keyboard.press('Tab');
+                        assert.ok(await answer.evaluate(element => document.activeElement === element));
+                    }
+                    await toggle.focus();
+                    await placeAt(toggle, top);
+                    if (activation === 'pointer') {
+                        await toggle.click();
+                    } else {
+                        await page.keyboard.press(activation);
+                    }
+                    await settle(page);
+                    assert.deepEqual(await modeStates(page), [false, false, false]);
+                    await assertBottomAnchor(page, toggle);
+                    assert.ok(await toggle.evaluate(element => document.activeElement === element));
+                    assert.equal(await viewport.getAttribute('tabindex'), null);
+                    assert.deepEqual(await allImageGeometry(page), geometry);
+                }
+            }
+        } finally {
+            await browser.close();
+        }
+    });
+
+    test(`${directory}: answer Escape preserves focus and visual context through Info reflow`, async() => {
+        const browser = await chromium.launch({headless: true});
+        try {
+            const page = await transitionPage(browser, directory);
+            const question = page.locator('#question-coi-2');
+            for (const selector of ['input', 'select']) {
+                for (const top of [180, 470]) {
+                    await question.locator(toggleSelector).click();
+                    await settle(page);
+                    const answer = question.locator(selector).first();
+                    await answer.focus();
+                    await placeAt(answer, top);
+                    await settle(page);
+                    const before = await answer.boundingBox();
+                    const infoBefore = await question.locator('.info').boundingBox();
+                    await page.keyboard.press('Escape');
+                    await settle(page);
+                    assert.deepEqual(await modeStates(page), [false, false, false]);
+                    assert.ok(await answer.evaluate(element => document.activeElement === element));
+                    close((await answer.boundingBox()).y, before.y, 'Answer keeps its viewport Y after page-wide reflow');
+                    const infoAfter = await question.locator('.info').boundingBox();
+                    assert.ok(infoAfter.width < infoBefore.width, 'Info returned to native side column');
+                    await settle(page);
+                    close((await answer.boundingBox()).y, before.y, 'Context remains stable');
+                }
+            }
+            // Some layouts scroll a page container instead of the document itself.
+            await page.evaluate(() => {
+                Object.assign(document.getElementById('page').style, {height: '700px', overflowY: 'auto'});
+                window.scrollTo(0, 0);
+            });
+            await question.locator(toggleSelector).click();
+            await settle(page);
+            const nestedAnswer = question.locator('input').first();
+            await nestedAnswer.focus();
+            await nestedAnswer.evaluate(element => {
+                document.getElementById('page').scrollTop += element.getBoundingClientRect().top - 350;
+            });
+            await settle(page);
+            const nestedTop = (await nestedAnswer.boundingBox()).y;
+            await page.keyboard.press('Escape');
+            await settle(page);
+            assert.ok(await nestedAnswer.evaluate(element => document.activeElement === element));
+            close((await nestedAnswer.boundingBox()).y, nestedTop, 'Nested page scrolling preserves visual context too');
+        } finally {
+            await browser.close();
+        }
+    });
+
+    test(`${directory}: frame Escape reveals the first real answer with nearest scrolling and safe fallback`, async() => {
+        const browser = await chromium.launch({headless: true});
+        try {
+            const page = await transitionPage(browser, directory, [1777]);
+            const question = page.locator('.que.clozeonimage');
+            const viewport = question.locator(scrollSelector);
+            const toggle = question.locator(toggleSelector);
+            const answer = question.locator('input').first();
+            await question.locator('.qtype-clozeonimage-subquestion').first().evaluate(control => {
+                control.style.left = '1500px';
+                control.insertAdjacentHTML('afterbegin', '<input type="hidden" value="-1">' +
+                    '<button type="button" class="qtype-clozeonimage-clear-choice">C</button>' +
+                    '<button type="button" class="qtype-clozeonimage-review-surface">Feedback</button>');
+            });
+            const actualAnswer = question.locator('input:not([type="hidden"])').first();
+            for (let cycle = 0; cycle < 2; cycle++) {
+                await toggle.focus();
+                await page.keyboard.press(cycle ? 'Space' : 'Enter');
+                await settle(page);
+                await viewport.focus();
+                await page.evaluate(() => window.scrollBy(0, 900));
+                await page.keyboard.press('Escape');
+                await settle(page);
+                assert.ok(await actualAnswer.evaluate(element => document.activeElement === element),
+                    'Choose the real answer, not the earlier hidden sentinel, Clear or review surface');
+                const rect = await actualAnswer.boundingBox();
+                assert.ok(rect.x >= -1 && rect.x + rect.width <= 1441 && rect.y >= -1 && rect.y + rect.height <= 801,
+                    'Answer is visible on both axes in Normal view');
+                const nativeMargin = await actualAnswer.evaluate(element => parseFloat(getComputedStyle(element).scrollMarginTop));
+                close(rect.y, nativeMargin, 'Nearest top edge respects Moodle focus scroll-margin, without centering');
+                assert.equal(await viewport.getAttribute('tabindex'), null);
+                const position = await page.evaluate(() => [window.scrollX, window.scrollY]);
+                await actualAnswer.evaluate(element => element.scrollIntoView({block: 'nearest', inline: 'nearest',
+                    behavior: 'instant'}));
+                assert.deepEqual(await page.evaluate(() => [window.scrollX, window.scrollY]), position,
+                    'Already at a stable nearest-edge position');
+                await page.keyboard.press('Tab');
+                assert.ok(await question.locator('select').evaluate(element => document.activeElement === element));
+            }
+            // A review question with only disabled native answers must still offer a usable exit destination.
+            await question.locator('input, select, textarea').evaluateAll(controls => controls.forEach(control => {
+                control.disabled = true;
+            }));
+            await toggle.focus();
+            await page.keyboard.press('Enter');
+            await settle(page);
+            await viewport.focus();
+            await page.keyboard.press('Escape');
+            await settle(page);
+            assert.ok(await toggle.evaluate(element => document.activeElement === element),
+                'No-answer fallback is the local toggle');
+            assert.equal(await answer.isDisabled(), true);
         } finally {
             await browser.close();
         }

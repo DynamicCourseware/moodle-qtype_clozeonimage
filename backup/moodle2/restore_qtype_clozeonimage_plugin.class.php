@@ -17,7 +17,11 @@
 /**
  * Restore support for qtype_clozeonimage.
  *
+ * Adapted from Moodle core question/type/multianswer/backup/moodle2/restore_qtype_multianswer_plugin.class.php.
+ * Modifications for Cloze on Image copyright 2026 DynamicCourseware.org.
+ *
  * @package    qtype_clozeonimage
+ * @copyright  2010 onwards Eloy Lafuente (stronk7) {@link http://stronk7.com}
  * @copyright  2026 DynamicCourseware.org (Dominique Bauer)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */

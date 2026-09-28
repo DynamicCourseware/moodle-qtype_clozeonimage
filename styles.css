@@ -1,3 +1,11 @@
+/*
+ * Cloze on Image styles.
+ *
+ * Copyright 2026 DynamicCourseware.org (Dominique Bauer).
+ * This file is part of Moodle and is licensed under the GNU General Public License,
+ * version 3 or later. See COPYING.txt for the full license.
+ */
+
 .qtype-clozeonimage-scroll {
     max-width: 100%;
     overflow: visible;
@@ -46,6 +54,11 @@
     overscroll-behavior-x: contain;
     scroll-padding-inline: var(--qtype-clozeonimage-panorama-gutter);
     overflow-anchor: none;
+}
+
+.qtype-clozeonimage-panorama-active .qtype-clozeonimage-panorama:focus-visible {
+    outline: var(--bs-focus-ring-width) solid var(--bs-primary);
+    outline-offset: calc(-1 * var(--bs-focus-ring-width));
 }
 
 /* Paint only the breakout wings, outside the scrolling content and without intercepting input. */

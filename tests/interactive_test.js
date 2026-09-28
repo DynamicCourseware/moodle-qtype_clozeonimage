@@ -123,6 +123,10 @@ test('feedback controls have no plugin outer focus outline or pointer-focus CSS 
     const css = readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8');
     assert.equal(css.includes('qtype-clozeonimage-pointer-focus'), false);
     postcss.parse(css).walkRules(rule => {
+        // The independently scrollable frame has its own keyboard entry point, unlike a feedback control.
+        if (rule.selector === '.qtype-clozeonimage-panorama-active .qtype-clozeonimage-panorama:focus-visible') {
+            return;
+        }
         if (!rule.selector.includes(':focus') || rule.selector.includes('.qtype-clozeonimage-clear-choice')) {
             return;
         }

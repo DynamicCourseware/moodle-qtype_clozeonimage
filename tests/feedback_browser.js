@@ -121,6 +121,12 @@ for (const directory of ['src', 'build']) {
                     await visible(page, 0, `${type}: pointer leave closes`);
                 }
                 await page.locator('#before').focus();
+                if (wide) {
+                    await page.keyboard.press('Tab');
+                    await settle(page);
+                    assert.equal(await page.evaluate(() => document.activeElement.id), 'viewport');
+                    await visible(page, 0, 'The frame tab stop does not open control feedback');
+                }
                 for (const type of types) {
                     await page.keyboard.press('Tab');
                     await settle(page);
@@ -157,19 +163,30 @@ for (const directory of ['src', 'build']) {
         try {
             const page = await setup(browser, directory, true);
             const control = page.locator('#feedback-radio');
+            await page.locator('.que').evaluate(question => {
+                question.insertAdjacentHTML('beforebegin', '<div style="height:1200px"></div>');
+                question.insertAdjacentHTML('afterend', '<div style="height:1200px"></div>');
+            });
             // Transient focus, not a pinned click: core's earlier bubble handler would hide this first.
             await control.focus();
+            // Finish Boost's native smooth focus scroll before recording the Escape starting context.
+            await control.evaluate(element => element.scrollIntoView({block: 'center', inline: 'nearest', behavior: 'instant'}));
             await settle(page);
             await visible(page, 1, 'Focus opens');
+            const top = (await control.boundingBox()).y;
             await page.keyboard.press('Escape');
             await settle(page);
             await visible(page, 0, 'First Escape dismisses');
             assert.equal(await page.locator(`.${activeClass}`).count(), 1, 'First Escape leaves Wide active');
+            assert.ok(Math.abs((await control.boundingBox()).y - top) <= 1,
+                `First Escape viewport Y: before ${top}, after ${(await control.boundingBox()).y}`);
             await page.keyboard.press('Escape');
             await settle(page);
             assert.equal(await page.locator(`.${activeClass}`).count(), 0, 'Second Escape exits Wide');
             await visible(page, 0, 'Restored focus does not reopen feedback');
             assert.equal(await page.evaluate(() => document.activeElement.id), 'feedback-radio', 'Focus retained');
+            assert.ok(Math.abs((await control.boundingBox()).y - top) <= 1,
+                `Second Escape viewport Y: before ${top}, after ${(await control.boundingBox()).y}`);
             await page.locator('#before').focus();
             await control.focus();
             await settle(page);
