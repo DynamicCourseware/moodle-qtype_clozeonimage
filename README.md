@@ -2,7 +2,7 @@
 
 **Cloze on Image** (`qtype_clozeonimage`) is a Moodle question type that places standard Moodle Cloze subquestions directly over or around a background image.
 
-**Version 1.0.0** — see [release notes](CHANGELOG.md).
+**Version 1.1.0** — see [release notes](CHANGELOG.md).
 
 It is intended for questions in which the position of an answer field relative to an image is important. The answer controls remain ordinary Moodle Cloze controls, so standard Short Answer, Numerical, Multichoice, Multiple Response, grading, feedback, and review behaviour are retained.
 
@@ -13,6 +13,7 @@ The background image and positioned answer controls together form the question c
 - One background image per question.
 - Standard Moodle Cloze subquestions positioned over or around the image.
 - Drag positioning in the editing preview.
+- Reorder subquestions with Moodle's standard mouse and keyboard move controls.
 - Manual **Left** and **Top** coordinates.
 - Positive and negative coordinates are supported.
 - Controls may be positioned partly or completely outside the image.
@@ -30,9 +31,9 @@ The background image and positioned answer controls together form the question c
 
 Moodle 5.2 or later is required, together with Moodle's standard **Embedded answers (Cloze)** question type (`qtype_multianswer`). Both minimum version numbers are `2026042000` in `version.php`.
 
-The current version has been tested with Moodle 5.2.2+ (Build: 20260818) and Moodle 5.3 development builds (Build: 20260818).
+Version 1.1.0 has been tested on the official stable releases Moodle **5.2.4** (`2026042004.00`) and **5.3** (`2026100500.00`), both Build: 20261005, with PHP 8.3.6 and MariaDB 11.4.12. This includes fresh installation, upgrade from plugin tag `v1.0.0`, mixed-type reordering, question versioning and quiz attempts, XML import/export, and backup/restore.
 
-Testing against a Moodle 5.3 development build does not establish compatibility with the eventual final Moodle 5.3 release. Framed view browser checks have used Chromium and the Boost stylesheets from the test installations; other themes and browsers need their own checks.
+The authoring form has also been checked in Chromium with Boost on both stable releases, including mouse and keyboard moves, focus retention, preview refresh, added rows, saving and reopening. Other themes and browsers need their own checks. Earlier checks on Moodle 5.2.2+ and 5.3 development builds are supplementary evidence, not the basis for the final 5.3 compatibility claim.
 
 No external library, service, or third-party Moodle plugin is required.
 
@@ -48,7 +49,7 @@ No external library, service, or third-party Moodle plugin is required.
 3. Complete the installation.
 4. In a question bank, create a new question and select **Cloze on Image**.
 
-When upgrading from a development version, complete Moodle's upgrade process after replacing the plugin files. Version 1.0.0 increases the plugin version number; it introduces no additional database schema change beyond the existing development upgrade steps.
+When upgrading, replace the plugin files and complete Moodle's normal upgrade process. Version 1.1.0 increases the plugin version number to `2026100900` and introduces no new database schema step. Upgrade from `v1.0.0` preserves existing questions, images, positions, anchors, answers and attempts.
 
 ## Creating a question
 
@@ -80,6 +81,19 @@ Use the Moodle move handle beside a row number to reorder subquestions. Drag it 
 or focus it and press Enter or Space to choose a destination in Moodle's move dialogue.
 The source, coordinates and Anchor travel together, and preview numbers follow the new order.
 Updating the preview or adding rows retains the order; changes are saved only when the question is saved.
+
+Saving an edited question creates a new question version. Existing quiz attempts retain their original
+question version and answers, including attempts still in progress when the edit is saved.
+For a quiz configured to use the latest question version, Moodle's **Each attempt builds on the last** setting
+determines what happens next:
+
+| Setting | Next attempt |
+| --- | --- |
+| **No** | Uses the latest question version, without carrying forward the previous answers. |
+| **Yes** | Builds on the preceding attempt, retaining that attempt's question version and answers. |
+
+This applies whether the edit was saved before or after the preceding attempt finished. Reordering does not
+rewrite earlier attempts or their review pages.
 
 The positioning preview uses the available width of its form section and renders the actual Moodle answer controls, allowing their approximate size and spatial relationship to the image to be seen while positioning.
 

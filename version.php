@@ -25,10 +25,10 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'qtype_clozeonimage';
-$plugin->version   = 2026092700;
+$plugin->version   = 2026100900;
 $plugin->requires  = 2026042000; // Moodle 5.2.
 $plugin->dependencies = [
     'qtype_multianswer' => 2026042000,
 ];
 $plugin->maturity  = MATURITY_STABLE;
-$plugin->release   = '1.0.0';
+$plugin->release   = '1.1.0';

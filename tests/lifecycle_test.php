@@ -21,6 +21,8 @@ use question_bank;
 
 defined('MOODLE_INTERNAL') || die();
 
+question_bank::get_qtype('clozeonimage');
+
 /**
  * Tests for the normal Cloze on Image question lifecycle.
  *
@@ -388,6 +390,179 @@ final class lifecycle_test extends \advanced_testcase {
                 $this->assertSame('invalidroworder', $exception->errorcode);
             }
             $this->assertSame($count, $DB->count_records('question'));
+        }
+    }
+
+    /** @return array<string, array{bool, bool}> Quiz continuation and edit timing combinations. */
+    public static function attempt_version_provider(): array {
+        return [
+            'fresh attempt, edit after completion' => [false, false],
+            'fresh attempt, edit during attempt' => [false, true],
+            'build on last, edit after completion' => [true, false],
+            'build on last, edit during attempt' => [true, true],
+        ];
+    }
+
+    /** Reordered mixed types, coordinates, anchors and files survive XML and activity backup/restore. */
+    public function test_reordered_question_xml_and_backup_round_trips(): void {
+        global $CFG;
+        require_once($CFG->dirroot . '/question/format/xml/format.php');
+        require_once($CFG->dirroot . '/backup/util/includes/backup_includes.php');
+        require_once($CFG->dirroot . '/backup/util/includes/restore_includes.php');
+        require_once($CFG->dirroot . '/mod/quiz/locallib.php');
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+        $quiz = $generator->get_plugin_generator('mod_quiz')->create_instance(['course' => $course->id]);
+        $context = \context_module::instance($quiz->cmid);
+        $category = $generator->get_plugin_generator('core_question')->create_question_category(['contextid' => $context->id]);
+        $original = $this->create_saved_question($category, $context, 'roundtrip');
+        $form = $this->prepare_edit_form($original);
+        $form->roworigin = [7, 2, 3, 1, 5, 6, 4];
+        foreach (['subquestion', 'xleft', 'ytop', 'anchor'] as $field) {
+            $values = $form->$field;
+            $form->$field = [];
+            foreach ($form->roworigin as $index => $origin) {
+                $form->{$field}[$index] = $values[$origin - 1] ?? ($field === 'subquestion' ? '' : 0);
+            }
+        }
+        $saved = question_bank::get_qtype('clozeonimage')->save_question(clone $original, $form);
+        $saved = question_bank::load_question_data($saved->id);
+        $format = new \qformat_xml();
+        $xml = $format->writequestion($saved);
+        $filename = make_request_directory() . '/reordered.xml';
+        file_put_contents($filename, '<?xml version="1.0"?><quiz>' . $xml . '</quiz>');
+        $format->setContexts([$context]);
+        $format->setCourse($course);
+        $format->setCategory($category);
+        $format->setFilename($filename);
+        $format->setRealfilename('reordered.xml');
+        $format->setMatchgrades('error');
+        $format->setStoponerror(true);
+        $format->set_display_progress(false);
+        $this->assertTrue($format->importprocess());
+        $this->assertCount(1, $format->questionids);
+        $imported = question_bank::load_question_data(reset($format->questionids));
+        $normalisexml = static fn($xml) => preg_replace('/(?<=<!-- question: )[0-9]+(?=  -->)/', '0', $xml);
+        $this->assertSame($normalisexml($xml), $normalisexml((new \qformat_xml())->writequestion($imported)));
+
+        quiz_add_quiz_question($saved->id, $quiz);
+        \core_courseformat\formatactions::cm($course)->duplicate($quiz->cmid);
+        $quizzes = get_fast_modinfo($course)->get_instances_of('quiz');
+        $this->assertCount(2, $quizzes);
+        foreach ($quizzes as $candidate) {
+            if ($candidate->instance != $quiz->id) {
+                $structure = \mod_quiz\question\bank\qbank_helper::get_question_structure(
+                    $candidate->instance, $candidate->context
+                );
+                $restored = question_bank::load_question_data($structure[1]->questionid);
+            }
+        }
+        $this->assertNotEquals($saved->id, $restored->id);
+        $this->assertSame($normalisexml($xml), $normalisexml((new \qformat_xml())->writequestion($restored)));
+    }
+
+    /**
+     * Reordering respects Moodle's version selection and never changes an existing attempt.
+     *
+     * @param bool $buildonlast Whether each attempt builds on the last.
+     * @param bool $editduring Whether the edit happens before the first attempt finishes.
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('attempt_version_provider')]
+    public function test_reorder_quiz_attempt_versions(bool $buildonlast, bool $editduring): void {
+        global $CFG, $DB, $PAGE;
+        require_once($CFG->dirroot . '/mod/quiz/locallib.php');
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        [$course, $context, $category] = $this->create_question_bank_fixture();
+        $original = $this->create_saved_question($category, $context, 'attempt');
+        $generator = $this->getDataGenerator();
+        $student = $generator->create_user();
+        $generator->enrol_user($student->id, $course->id, 'student');
+        $quizgenerator = $generator->get_plugin_generator('mod_quiz');
+        $quiz = $quizgenerator->create_instance([
+            'course' => $course->id, 'attemptonlast' => (int)$buildonlast,
+            'preferredbehaviour' => 'deferredfeedback', 'sumgrades' => 3,
+        ]);
+        quiz_add_quiz_question($original->id, $quiz);
+        $slotid = $DB->get_field('quiz_slots', 'id', ['quizid' => $quiz->id, 'slot' => 1], MUST_EXIST);
+        $reference = $DB->get_record('question_references', [
+            'component' => 'mod_quiz', 'questionarea' => 'slot', 'itemid' => $slotid,
+        ], '*', MUST_EXIST);
+        $this->assertNull($reference->version, 'The quiz must use the latest question version.');
+
+        $this->setUser($student);
+        $attempt = $quizgenerator->create_attempt($quiz->id, $student->id);
+        $first = \mod_quiz\quiz_attempt::create($attempt->id);
+        $qa = $first->get_question_attempt(1);
+        $response = $qa->get_question()->get_correct_response();
+        $first->get_question_usage()->process_action(1, $response);
+        \question_engine::save_questions_usage_by_activity($first->get_question_usage());
+        if (!$editduring) {
+            $first->process_submit(time(), false);
+            $first->process_grade_submission(time());
+        }
+        $first = \mod_quiz\quiz_attempt::create($attempt->id);
+        $qa = $first->get_question_attempt(1);
+        $snapshot = serialize([$qa->get_question(), $qa->get_last_qt_data(), $qa->get_state(), $qa->get_mark()]);
+        $PAGE->set_url(new \moodle_url('/mod/quiz/review.php', ['attempt' => $attempt->id]));
+        $options = new \question_display_options();
+        $options->readonly = true;
+        // Core's multianswer renderer numbers accessible labels globally within one PHP request.
+        // Real review requests start that counter afresh; ignore only that counter in this comparison.
+        $renderreview = static fn($qa) => preg_replace('/Answer \d+ Question 1/', 'Answer Question 1', $qa->render($options, 1));
+        $review = $renderreview($qa);
+
+        $this->setAdminUser();
+        $form = $this->prepare_edit_form($original);
+        $form->roworigin = [7, 2, 3, 1, 5, 6, 4];
+        foreach (['subquestion', 'xleft', 'ytop', 'anchor'] as $field) {
+            $values = $form->$field;
+            $form->$field = [];
+            foreach ($form->roworigin as $index => $origin) {
+                $form->{$field}[$index] = $values[$origin - 1] ?? ($field === 'subquestion' ? '' : 0);
+            }
+        }
+        $saved = question_bank::get_qtype('clozeonimage')->save_question(clone $original, $form);
+        $this->assertNotEquals($original->id, $saved->id);
+        $this->setUser($student);
+        $first = \mod_quiz\quiz_attempt::create($attempt->id);
+        $qa = $first->get_question_attempt(1);
+        $this->assertSame($snapshot,
+            serialize([$qa->get_question(), $qa->get_last_qt_data(), $qa->get_state(), $qa->get_mark()]));
+        $this->assertSame($review, $renderreview($qa));
+        $this->assertSame(!$editduring, $first->is_finished());
+        if ($editduring) {
+            $first->process_submit(time(), false);
+            $first->process_grade_submission(time());
+        }
+        $first = \mod_quiz\quiz_attempt::create($attempt->id);
+        $this->assertTrue($first->is_finished());
+        $qa = $first->get_question_attempt(1);
+        $this->assertEquals($original->id, $qa->get_question()->id);
+        $this->assertEquals($response, array_intersect_key($qa->get_last_qt_data(), $response));
+        $this->assertEquals(3, $qa->get_mark());
+        $finishedreview = $renderreview($qa);
+
+        $nextattempt = $quizgenerator->create_attempt($quiz->id, $student->id);
+        $next = \mod_quiz\quiz_attempt::create($nextattempt->id)->get_question_attempt(1);
+        $this->assertEquals($buildonlast ? $original->id : $saved->id, $next->get_question()->id);
+        if ($buildonlast) {
+            $this->assertEquals($response, array_intersect_key($next->get_last_qt_data(), $response));
+            $this->assertEquals($qa->get_question(), $next->get_question());
+        } else {
+            $this->assertEmpty(array_intersect_key($next->get_last_qt_data(), $response));
+            $this->assertSame(['numerical', 'shortanswer', 'multichoice'], array_values(array_map(
+                static fn($child) => $child->get_type_name(), $next->get_question()->subquestions
+            )));
+        }
+        $reloaded = \mod_quiz\quiz_attempt::create($attempt->id)->get_question_attempt(1);
+        $this->assertSame($finishedreview, $renderreview($reloaded));
+        foreach ([$original->id, $saved->id] as $questionid) {
+            $this->assert_plugin_file($context->id, 'bgimage', $questionid, 'background-attempt.png', 'background-attempt');
         }
     }
 

@@ -62,8 +62,15 @@ const setup = directory => {
             create: async config => {
                 const body = await config.body;
                 const root = $('<div role="dialog">').append(body).appendTo(document.body);
+                let returnElement;
                 modal = {getRoot: () => root, setLarge: () => undefined, show: () => root.find('a').first().trigger('focus'),
-                    hide: () => root.trigger('hidden'), destroy: () => root.remove()};
+                    setReturnElement: element => {
+                        returnElement = element;
+                    },
+                    hide: () => {
+                        root.trigger('hidden');
+                        returnElement?.trigger('focus');
+                    }, destroy: () => root.remove()};
                 return modal;
             },
         }, {hidden: 'hidden'}, {exception: error => errors.push(error)});

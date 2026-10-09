@@ -1,5 +1,25 @@
 # Release notes
 
+## 1.1.0 — 2026-10-09
+
+### Subquestion reordering
+
+- Reorder editable subquestions using Moodle's standard `core/sortable_list` mouse and keyboard interaction.
+- Keep each source, Left/Top position and Anchor together; update preview numbering and retain focus after a move.
+- Retain the order when refreshing the preview or adding rows. Changes remain local to the form until the question is saved.
+- Validate submitted row origins on the server and preserve the original child question identities when creating a new version, including sparse rows and mixed question types.
+- Use the translated **Order** column heading and align move handles and one-, two- and three-digit row numbers with clear spacing on wide and narrow screens.
+
+### Compatibility and upgrade
+
+- Tested on official stable Moodle 5.2.4 (`2026042004.00`) and Moodle 5.3 (`2026100500.00`), both Build: 20261005, with PHP 8.3.6 and MariaDB 11.4.12.
+- Validated fresh installation and upgrade from `v1.0.0`, preserving question data, images, positions, anchors, answers and existing attempts.
+- Verified edits before and after attempt completion with **Each attempt builds on the last** both disabled and enabled, while the quiz follows the latest question version. Existing attempts and reviews are preserved; subsequent attempts follow Moodle's version-selection rules.
+- Verified saving/reopening, Moodle XML export/import and backup/restore after mixed-type reordering, plus real authoring forms in Chromium with Boost on both stable Moodle releases.
+- Requires Moodle 5.2 and `qtype_multianswer`, minimum version `2026042000`, as in 1.0.0.
+- Plugin version: `2026100900`; maturity: `MATURITY_STABLE`. Run Moodle's normal upgrade process; no new database schema step is introduced.
+- Includes AMD sources and compiled JavaScript. Framed view is unchanged.
+
 ## 1.0.0
 
 First stable release prepared for publication.
