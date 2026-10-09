@@ -226,6 +226,9 @@ final class diagnostic_test extends \advanced_testcase {
             'inputs' => null,
         ];
 
+        if (isset($request['_qf__qtype_clozeonimage_edit_form'])) {
+            $request['sesskey'] = sesskey();
+        }
         $_POST = $request;
         $form = new \qtype_clozeonimage_edit_form(
             new \moodle_url('/'),
@@ -735,6 +738,30 @@ final class diagnostic_test extends \advanced_testcase {
         $this->assertStringContainsString('data-row-index="0"', $renderedform);
         $this->assertStringNotContainsString('data-row-index="3"', $renderedform);
         $this->assertStringContainsString('data-row-index="6"', $renderedform);
+    }
+
+    /** Preview refresh and adding rows retain the submitted order and origin map. */
+    public function test_reordered_rows_survive_preview_and_add_rows(): void {
+        $sources = ['{1:NUMERICAL:=42:0}', '', '{1:SHORTANSWER:=Owl}'];
+        foreach (['updatepreview', 'addsubquestions'] as $action) {
+            $request = ['nosubquestions' => 3, $action => 1, 'subquestion' => $sources,
+                'roworigin' => [3, 2, 1], 'xleft' => [-20, 0, 75], 'ytop' => [84, 0, -30],
+                'anchor' => [8, -1, 0], '_qf__qtype_clozeonimage_edit_form' => 1];
+            [$form] = $this->make_form($request);
+            $html = $form->render();
+            $dom = new \DOMDocument();
+            @$dom->loadHTML($html);
+            $xpath = new \DOMXPath($dom);
+            $expectedcount = $action === 'addsubquestions' ? 6 : 3;
+            $this->assertSame($expectedcount, $xpath->query('//button[@data-drag-type="move"]')->length);
+            $this->assertSame($sources[0], $xpath->query('//textarea[@name="subquestion[0]"]')->item(0)->textContent);
+            $this->assertSame('3', $xpath->query('//input[@name="roworigin[0]"]')->item(0)->getAttribute('value'));
+            $this->assertSame('-20', $xpath->query('//input[@name="xleft[0]"]')->item(0)->getAttribute('value'));
+            $this->assertSame('8', $xpath->query('//input[@name="anchor[0]" and @checked]')->item(0)->getAttribute('value'));
+            if ($action === 'addsubquestions') {
+                $this->assertSame('6', $xpath->query('//input[@name="roworigin[5]"]')->item(0)->getAttribute('value'));
+            }
+        }
     }
 
     public function test_column_headings_contain_help_without_standalone_instruction(): void {

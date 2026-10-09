@@ -311,6 +311,86 @@ final class lifecycle_test extends \advanced_testcase {
         ];
     }
 
+    /** Reordering mixed types preserves child bank identities, positions and the previous version. */
+    public function test_reorder_mixed_types_save_and_reopen(): void {
+        global $CFG, $PAGE;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        [, $context, $category] = $this->create_question_bank_fixture();
+        $original = $this->create_saved_question($category, $context, 'reorder');
+        $oldchildren = array_values($original->options->questions);
+        $form = $this->prepare_edit_form($original);
+        // Include blank authoring rows and move numerical before shortanswer and multichoice.
+        $form->roworigin = [7, 2, 3, 1, 5, 6, 4];
+        foreach (['subquestion', 'xleft', 'ytop', 'anchor'] as $field) {
+            $oldvalues = $form->$field;
+            $form->$field = [];
+            foreach ($form->roworigin as $index => $origin) {
+                $form->{$field}[$index] = $oldvalues[$origin - 1] ?? ($field === 'subquestion' ? '' : 0);
+            }
+        }
+        $saved = question_bank::get_qtype('clozeonimage')->save_question(clone $original, $form);
+        $reopened = question_bank::load_question_data($saved->id);
+        $this->assertSame([1 => 1, 2 => 4, 3 => 7], $reopened->options->questionrows);
+        foreach ([2, 0, 1] as $index => $oldindex) {
+            $child = $reopened->options->questions[$index + 1];
+            $this->assertSame($oldchildren[$oldindex]->qtype, $child->qtype);
+            $this->assertSame($oldchildren[$oldindex]->questiontext, $child->questiontext);
+            $this->assertSame(get_question_bank_entry($oldchildren[$oldindex]->id)->id,
+                get_question_bank_entry($child->id)->id);
+            $oldrow = [1, 4, 7][$oldindex];
+            $newrow = [1, 4, 7][$index];
+            foreach (['xleft', 'ytop', 'anchor'] as $field) {
+                $this->assertSame((int)$original->options->positions[$oldrow]->$field,
+                    (int)$reopened->options->positions[$newrow]->$field);
+            }
+        }
+        $previous = question_bank::load_question_data($original->id);
+        $this->assertSame($original->options->sequence, $previous->options->sequence);
+        $this->assertSame(self::SOURCES[0], $previous->options->questions[1]->questiontext);
+
+        require_once($CFG->dirroot . '/question/type/clozeonimage/edit_clozeonimage_form.php');
+        $PAGE->set_url(new \moodle_url('/'));
+        $reopened->formoptions = (object)['canmove' => false, 'cansaveasnew' => false, 'canedit' => true,
+            'movecontext' => null, 'repeatelements' => true];
+        $reopened->beingcopied = false;
+        $reopened->inputs = null;
+        $editform = new \qtype_clozeonimage_edit_form(new \moodle_url('/'), $reopened, $category,
+            new \core_question\local\bank\question_edit_contexts($context));
+        $editform->set_data($reopened);
+        $html = $editform->render();
+        $dom = new \DOMDocument();
+        @$dom->loadHTML($html);
+        $xpath = new \DOMXPath($dom);
+        $this->assertSame(self::SOURCES[6], $xpath->query('//textarea[@name="subquestion[0]"]')->item(0)->textContent);
+        $this->assertSame('1', $xpath->query('//input[@name="roworigin[0]"]')->item(0)->getAttribute('value'));
+        $this->assertSame(7, $xpath->query('//button[@data-drag-type="move"]')->length);
+    }
+
+    /** Malformed origin maps are rejected before creating a parent or child version. */
+    public function test_invalid_row_origin_rejected_before_save(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        [, $context, $category] = $this->create_question_bank_fixture();
+        $original = $this->create_saved_question($category, $context, 'invalidorder');
+        $count = $DB->count_records('question');
+        foreach ([[1, 1, 3], [1, 2, 99], [0, 2, 3], [1, 2], ['1x', 2, 3], [], '1,2,3'] as $origins) {
+            $form = $this->prepare_edit_form($original);
+            $form->subquestion = array_values($form->subquestion);
+            $form->roworigin = $origins;
+            try {
+                question_bank::get_qtype('clozeonimage')->save_question(clone $original, $form);
+                $this->fail('Invalid row origin must be rejected');
+            } catch (\moodle_exception $exception) {
+                $this->assertSame('invalidroworder', $exception->errorcode);
+            }
+            $this->assertSame($count, $DB->count_records('question'));
+        }
+    }
+
     /**
      * Return dense child IDs from a loaded question.
      *

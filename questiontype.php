@@ -509,6 +509,9 @@ class qtype_clozeonimage extends question_type {
      */
     public function save_question($question, $form) {
         $this->require_consistent_position_metadata_for_save($question, $form);
+        if (property_exists($form, 'roworigin') && !self::valid_row_origins($form->roworigin, $form->subquestion ?? [])) {
+            throw new moodle_exception('invalidroworder', 'qtype_clozeonimage');
+        }
 
         $form->parsedsubquestions = [];
         $form->defaultmark = 0;
@@ -522,6 +525,7 @@ class qtype_clozeonimage extends question_type {
             if ($wrapped) {
                 $form->parsedsubquestions[] = (object)[
                     'rowindex' => (int)$rowindex,
+                    'originalrow' => (int)($form->roworigin[$rowindex] ?? $rowindex + 1),
                     'question' => $wrapped,
                 ];
                 $form->defaultmark += (float)$wrapped->defaultmark;
@@ -533,6 +537,40 @@ class qtype_clozeonimage extends question_type {
         }
 
         return parent::save_question($question, $form);
+    }
+
+    /**
+     * Validate the complete permutation submitted by the authoring form, including blank rows.
+     * Imports and legacy API callers may omit this form-only field; supplied maps must be complete.
+     *
+     * @param mixed $origins Submitted original one-based row numbers.
+     * @param array $sources Submitted sources indexed by current zero-based row.
+     * @return bool Whether each original row occurs exactly once in the current form.
+     */
+    public static function valid_row_origins($origins, array $sources): bool {
+        if (!is_array($origins) || !$origins || count($origins) !== count($sources)) {
+            return false;
+        }
+        $expected = range(0, count($sources) - 1);
+        $keys = array_keys($origins);
+        sort($keys);
+        $sourcekeys = array_keys($sources);
+        sort($sourcekeys);
+        if ($keys !== $expected || $sourcekeys !== $expected) {
+            return false;
+        }
+        $seen = [];
+        foreach ($origins as $origin) {
+            if ((!is_int($origin) && !is_string($origin)) || !preg_match('/^[1-9][0-9]*$/D', (string)$origin)) {
+                return false;
+            }
+            $number = (int)$origin;
+            if ($number < 1 || $number > count($sources) || isset($seen[$number])) {
+                return false;
+            }
+            $seen[$number] = true;
+        }
+        return true;
     }
 
     /**
@@ -596,9 +634,12 @@ class qtype_clozeonimage extends question_type {
                 $oldids = array_values(array_filter(array_map('intval', explode(',', $oldsequence))));
                 if ($oldids) {
                     $unordered = $DB->get_records_list('question', 'id', $oldids);
+                    $oldpositions = array_values($DB->get_records(
+                        'qtype_clozeonimage_pos', ['questionid' => $formdata->oldparent], 'no ASC, id ASC'
+                    ));
                     foreach ($oldids as $index => $id) {
                         if (isset($unordered[$id])) {
-                            $oldwrappedquestions[$index] = $unordered[$id];
+                            $oldwrappedquestions[(int)$oldpositions[$index]->no] = $unordered[$id];
                         }
                     }
                 }
@@ -607,13 +648,15 @@ class qtype_clozeonimage extends question_type {
 
         $sequence = [];
         $rowindices = [];
-        foreach (($formdata->parsedsubquestions ?? []) as $placeindex => $entry) {
+        foreach (($formdata->parsedsubquestions ?? []) as $entry) {
             $wrapped = $entry->question;
             $wrapped->id = 0;
-            if (isset($oldwrappedquestions[$placeindex])) {
-                $oldwrapped = $oldwrappedquestions[$placeindex];
+            // XML imports supply parsed rows directly and have no authoring origin map.
+            $originalrow = $entry->originalrow ?? $entry->rowindex + 1;
+            if (isset($oldwrappedquestions[$originalrow])) {
+                $oldwrapped = $oldwrappedquestions[$originalrow];
                 $wrapped->oldid = $oldwrapped->id;
-                unset($oldwrappedquestions[$placeindex]);
+                unset($oldwrappedquestions[$originalrow]);
             }
             $wrapped->name = $formdata->name;
             $wrapped->parent = $formdata->id;

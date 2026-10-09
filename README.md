@@ -57,7 +57,7 @@ A Cloze on Image form presents the principal fields in this order:
 - **Question name** and **Question text**.
 - **Image**, **Image width (px)**, and **Control appearance**.
 - **Position subquestions**, including the interactive positioning preview.
-- A subquestion table with columns for **No.**, **Left**, **Top**, **Anchor**, and **Cloze subquestion source**.
+- A subquestion table with columns for **Order**, **Left**, **Top**, **Anchor**, and **Cloze subquestion source**.
 - **Add 3 more subquestions** and optional formatted **Text after image**.
 
 A typical authoring workflow is:
@@ -75,6 +75,11 @@ A typical authoring workflow is:
 The form initially provides three subquestion rows. Additional rows can be added three at a time.
 
 Blank rows are ignored. Leaving an intermediate row blank does not renumber later populated rows.
+
+Use the Moodle move handle beside a row number to reorder subquestions. Drag it with the mouse,
+or focus it and press Enter or Space to choose a destination in Moodle's move dialogue.
+The source, coordinates and Anchor travel together, and preview numbers follow the new order.
+Updating the preview or adding rows retains the order; changes are saved only when the question is saved.
 
 The positioning preview uses the available width of its form section and renders the actual Moodle answer controls, allowing their approximate size and spatial relationship to the image to be seen while positioning.
 

@@ -410,6 +410,21 @@ final class missing_child_test extends \qbehaviour_walkthrough_test_base {
         $this->assertSame(3, $DB->count_records('qtype_clozeonimage_pos', ['questionid' => $question->id]));
     }
 
+    /** A missing child moved to a different row still blocks saving until repaired. */
+    public function test_reordered_missing_child_uses_original_row_for_validation(): void {
+        $questiondata = $this->reload_with_missing_child($this->create_saved_question(), 2);
+        [$form, $formquestion] = $this->make_edit_form($questiondata);
+        $sources = ['', '', '', self::SOURCES[0], '', '', self::SOURCES[6]];
+        $data = $this->make_validation_data($formquestion, $sources);
+        $data['roworigin'] = [4, 2, 3, 1, 5, 6, 7];
+        $errors = $form->validation($data, []);
+        $this->assertArrayHasKey('subquestionrow[0]', $errors);
+        $this->assertArrayNotHasKey('subquestionrow[3]', $errors);
+        $data['subquestion'][0] = '{1:NUMERICAL:=2:0}';
+        $errors = $form->validation($data, []);
+        $this->assertArrayNotHasKey('subquestionrow[0]', $errors);
+    }
+
     /**
      * A valid explicit replacement creates a healthy new version without shifting surviving children.
      */

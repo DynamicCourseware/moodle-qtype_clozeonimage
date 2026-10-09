@@ -150,6 +150,17 @@ class qtype_clozeonimage_edit_form extends question_edit_form {
         $count = $this->get_subquestion_repeat_count();
         $repeated = [];
         $rowelements = [];
+        $rowelements[] = $mform->createElement('hidden', 'roworigin');
+        $rowelements[] = $mform->createElement('html', html_writer::span(
+            $OUTPUT->render_from_template('core/drag_handle', [
+                'movetitle' => get_string(
+                    'movecontent',
+                    'moodle',
+                    get_string('subquestionno', 'qtype_clozeonimage', '{no}')
+                ),
+            ]),
+            'qtype-clozeonimage-move d-none'
+        ));
         $coordinateattributes = [
             'inputmode' => 'text',
             'pattern' => '-?[0-9]*',
@@ -181,8 +192,10 @@ class qtype_clozeonimage_edit_form extends question_edit_form {
             '',
             ['rows' => 2, 'cols' => 90, 'class' => 'qtype-clozeonimage-source']
         );
-        $rowlabel = html_writer::span(get_string('subquestion', 'qtype_clozeonimage'), 'visually-hidden') .
-            ' {no}';
+        $rowlabel = html_writer::span(
+            html_writer::span(get_string('subquestion', 'qtype_clozeonimage'), 'visually-hidden') . ' {no}',
+            'qtype-clozeonimage-row-number'
+        );
         $repeated[] = $mform->createElement(
             'group',
             'subquestionrow',
@@ -194,6 +207,7 @@ class qtype_clozeonimage_edit_form extends question_edit_form {
         );
 
         $repeatedoptions = [
+            'roworigin' => ['type' => PARAM_RAW, 'default' => '{no}'],
             'subquestion' => ['type' => PARAM_RAW],
             'xleft' => ['type' => PARAM_INT],
             'ytop' => ['type' => PARAM_INT],
@@ -236,7 +250,8 @@ class qtype_clozeonimage_edit_form extends question_edit_form {
                         get_string('sourceforsubquestion', 'qtype_clozeonimage', $i + 1)]);
                 } else if (
                     $element instanceof HTML_QuickForm_html &&
-                        str_contains($element->toHtml(), 'qtype-clozeonimage-anchor-area')
+                        (str_contains($element->toHtml(), 'qtype-clozeonimage-anchor-area') ||
+                        str_contains($element->toHtml(), 'qtype-clozeonimage-move'))
                 ) {
                     $element->setValue(str_replace('{no}', (string)($i + 1), $element->toHtml()));
                 }
@@ -286,6 +301,7 @@ class qtype_clozeonimage_edit_form extends question_edit_form {
         $PAGE->requires->js_call_amd('qtype_clozeonimage/form', 'init', [
             $isupdatepreview,
         ]);
+        $PAGE->requires->js_call_amd('qtype_clozeonimage/reorder', 'init');
     }
 
     /**
@@ -705,15 +721,28 @@ class qtype_clozeonimage_edit_form extends question_edit_form {
     /**
      * Return persisted missing-child rows keyed by their zero-based form index.
      *
+     * @param array|null $origins Submitted row identities, or null to read the request.
+     * @param array|null $sources Submitted sources, or null to read the request.
      * @return int[] Form index => visible row number.
      */
-    private function missing_subquestion_rows(): array {
+    private function missing_subquestion_rows(?array $origins = null, ?array $sources = null): array {
         $missingrows = [];
+        $origins = $origins ?? optional_param_array('roworigin', [], PARAM_RAW);
+        $sources = $sources ?? optional_param_array('subquestion', [], PARAM_RAW);
+        if (!qtype_clozeonimage::valid_row_origins($origins, $sources)) {
+            $origins = [];
+        }
         foreach (($this->question->options->questions ?? []) as $place => $wrapped) {
             if (($wrapped->qtype ?? '') !== 'subquestion_replacement') {
                 continue;
             }
             $rowno = $this->visible_row_for_place((int) $place);
+            if ($origins) {
+                $index = array_search($rowno, array_map('intval', $origins), true);
+                if ($index !== false) {
+                    $rowno = $index + 1;
+                }
+            }
             $missingrows[$rowno - 1] = $rowno;
         }
         return $missingrows;
@@ -737,6 +766,12 @@ class qtype_clozeonimage_edit_form extends question_edit_form {
     #[\Override]
     public function validation($data, $files) {
         $errors = parent::validation($data, $files);
+
+        if (array_key_exists('roworigin', $data) &&
+                !qtype_clozeonimage::valid_row_origins($data['roworigin'], $data['subquestion'] ?? [])) {
+            $errors['subquestionrow[0]'] = get_string('invalidroworder', 'qtype_clozeonimage');
+            return $errors;
+        }
 
         if ($this->has_corrupt_position_metadata()) {
             $errors['positionmetadataerror'] = get_string(
@@ -788,7 +823,7 @@ class qtype_clozeonimage_edit_form extends question_edit_form {
                     self::format_subquestion_diagnostics($diagnostics, $i + 1);
             }
         }
-        foreach ($this->missing_subquestion_rows() as $i => $rowno) {
+        foreach ($this->missing_subquestion_rows($data['roworigin'] ?? null, $data['subquestion'] ?? []) as $i => $rowno) {
             $source = qtype_clozeonimage::normalise_subquestion_source(
                 (string) ($data['subquestion'][$i] ?? '')
             );
