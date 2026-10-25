@@ -96,6 +96,7 @@ final class xml_test extends \advanced_testcase {
                 'xleft' => $xleft,
                 'ytop' => $ytop,
                 'anchor' => $anchor,
+                'elementkey' => str_pad(dechex($no), 32, '0', STR_PAD_LEFT),
             ]);
         }
 
@@ -338,7 +339,6 @@ final class xml_test extends \advanced_testcase {
      */
     public static function structural_invalid_xml_provider(): array {
         return [
-            'missing background image' => ['missingbackgroundimage'],
             'multiple background images' => ['multiplebackgroundimages'],
             'no subquestions' => ['nosubquestions'],
             'duplicate visible row number' => ['duplicaterownumber'],
@@ -347,8 +347,6 @@ final class xml_test extends \advanced_testcase {
             'non-integer row number' => ['nonintegerrownumber'],
             'missing source' => ['missingsource'],
             'blank source' => ['blanksource'],
-            'source without Cloze' => ['sourcewithoutcloze'],
-            'source with multiple Cloze subquestions' => ['sourcewithmultiplecloze'],
         ];
     }
 
@@ -361,8 +359,8 @@ final class xml_test extends \advanced_testcase {
         return [
             'missing xleft' => ['/quiz/question/subquestions/subquestion[1]/xleft', null],
             'missing ytop' => ['/quiz/question/subquestions/subquestion[1]/ytop', null],
-            'decimal xleft' => ['/quiz/question/subquestions/subquestion[1]/xleft', '12.5'],
-            'decimal ytop' => ['/quiz/question/subquestions/subquestion[1]/ytop', '-12.5'],
+            'nonfinite xleft' => ['/quiz/question/subquestions/subquestion[1]/xleft', 'INF'],
+            'nonfinite ytop' => ['/quiz/question/subquestions/subquestion[1]/ytop', 'NaN'],
             'alphabetic coordinate' => ['/quiz/question/subquestions/subquestion[1]/xleft', 'abc'],
             'mixed coordinate' => ['/quiz/question/subquestions/subquestion[1]/ytop', '10abc'],
             'empty coordinate' => ['/quiz/question/subquestions/subquestion[1]/xleft', ''],

@@ -27,8 +27,6 @@ const start = loader.indexOf('const enablePopovers =');
 const end = loader.indexOf('/**\n * Enable tooltips', start);
 assert.ok(start >= 0 && end > start, 'Use the actual Boost popover initialization and event handlers');
 const corePopovers = loader.slice(start, end);
-const activeClass = 'qtype-clozeonimage-panorama-active';
-const toggle = '[data-action="clozeonimage-toggle-panorama"]';
 const settle = page => page.waitForTimeout(250);
 const attributes = 'data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-container="body" ' +
     'data-bs-placement="right" data-bs-content="Feedback content"';
@@ -54,22 +52,27 @@ const fixture = () => {
         <img class="qtype-clozeonimage-image" style="width:800px;max-width:none;height:450px" alt=""
             src="data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="450"/>')}">
         ${controls}</div></div><button type="button" id="outside">Outside controls</button>
-        <button type="button" data-action="clozeonimage-toggle-panorama" data-normal-label="Framed view"
-            data-panorama-label="Exit framed view" aria-controls="viewport" aria-pressed="false">Framed view</button>
         </div></div></div><button id="unrelated" ${attributes}>Unrelated core popover</button></div></div></body></html>`;
 };
 const loadModule = async(page, directory, name) => {
     await page.evaluate(module => {
         window.define = (...args) => {
- window[module] = args.at(-1)(window.bootstrap);
+ const dependencies = {
+     'core/pagehelpers': {isSmall: () => false},
+     'core/pending': {complete: () => {}},
+     'theme_boost/index': window.bootstrap,
+     'theme_boost/loader': {},
+     'qtype_clozeonimage/composition_geometry': window.composition_geometry,
+ };
+ window[module] = args.at(-1)(...args.at(-2).map(name => dependencies[name]));
 };
     }, name);
     const file = directory === 'src' ? `${name}.js` : `${name}.min.js`;
     await page.addScriptTag({path: path.join(root, 'amd', directory, file)});
-    await page.evaluate(module => window[module].init(), name);
+    await page.evaluate(module => window[module].init?.(), name);
 };
-const setup = async(browser, directory, wide) => {
-    const page = await browser.newPage({viewport: {width: 1440, height: 1000}});
+const setup = async(browser, directory, narrow) => {
+    const page = await browser.newPage({viewport: {width: narrow ? 430 : 1440, height: 1000}});
     await page.route('**/*', route => route.abort());
     await page.setContent(fixture());
     await page.addStyleTag({path: process.env.COI_THEME_CSS});
@@ -83,25 +86,19 @@ const setup = async(browser, directory, wide) => {
     });
     await page.addScriptTag({content: `${corePopovers}\nenablePopovers();`});
     await loadModule(page, directory, 'feedback');
+    await loadModule(page, directory, 'composition_geometry');
     await loadModule(page, directory, 'layout');
-    if (wide) {
-        await page.locator(toggle).click();
-        await settle(page);
-        await page.locator('.qtype-clozeonimage-scroll').evaluate(element => {
- element.scrollLeft = 0;
-});
-    }
     await page.mouse.move(0, 0);
     return page;
 };
 const visible = async(page, count, message) => assert.equal(await page.locator('.popover.show').count(), count, message);
 
 for (const directory of ['src', 'build']) {
-    for (const wide of [false, true]) {
-        test(`${directory}: ${wide ? 'Wide' : 'Normal'}: review hover, Tab focus and clicks with Boost loader`, async() => {
+    for (const narrow of [false, true]) {
+        test(`${directory}: ${narrow ? 'Narrow' : 'Wide'}: review hover, Tab focus and clicks with Boost loader`, async() => {
             const browser = await chromium.launch({headless: true});
             try {
-                const page = await setup(browser, directory, wide);
+                const page = await setup(browser, directory, narrow);
                 assert.equal(await page.evaluate(() => {
                     const control = document.getElementById('feedback-radio');
                     const instance = window.bootstrap.Popover.getInstance(control);
@@ -121,12 +118,6 @@ for (const directory of ['src', 'build']) {
                     await visible(page, 0, `${type}: pointer leave closes`);
                 }
                 await page.locator('#before').focus();
-                if (wide) {
-                    await page.keyboard.press('Tab');
-                    await settle(page);
-                    assert.equal(await page.evaluate(() => document.activeElement.id), 'viewport');
-                    await visible(page, 0, 'The frame tab stop does not open control feedback');
-                }
                 for (const type of types) {
                     await page.keyboard.press('Tab');
                     await settle(page);
@@ -177,13 +168,11 @@ for (const directory of ['src', 'build']) {
             await page.keyboard.press('Escape');
             await settle(page);
             await visible(page, 0, 'First Escape dismisses');
-            assert.equal(await page.locator(`.${activeClass}`).count(), 1, 'First Escape leaves Wide active');
             assert.ok(Math.abs((await control.boundingBox()).y - top) <= 1,
                 `First Escape viewport Y: before ${top}, after ${(await control.boundingBox()).y}`);
             await page.keyboard.press('Escape');
             await settle(page);
-            assert.equal(await page.locator(`.${activeClass}`).count(), 0, 'Second Escape exits Wide');
-            await visible(page, 0, 'Restored focus does not reopen feedback');
+            await visible(page, 0, 'Repeated Escape does not reopen feedback');
             assert.equal(await page.evaluate(() => document.activeElement.id), 'feedback-radio', 'Focus retained');
             assert.ok(Math.abs((await control.boundingBox()).y - top) <= 1,
                 `Second Escape viewport Y: before ${top}, after ${(await control.boundingBox()).y}`);
@@ -221,14 +210,8 @@ for (const directory of ['src', 'build']) {
                     <label id="checkbox-label"><input type="checkbox" checked> Selected checkbox</label></div></div>`);
                 window.feedback.init();
             }, attributes);
-            for (const wide of [false, true]) {
-                if (wide) {
-                    await page.locator(toggle).click();
-                    await settle(page);
-                    await page.locator('.qtype-clozeonimage-scroll').evaluate(element => {
- element.scrollLeft = 0;
-});
-                }
+            for (const width of [1440, 900]) {
+                await page.setViewportSize({width, height: 1000});
                 await page.locator('#radio-label').click({position: {x: 70, y: 10}});
                 await settle(page);
                 await visible(page, 1, 'Label plus forwarded input click must pin once');

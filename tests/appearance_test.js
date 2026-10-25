@@ -65,10 +65,11 @@ const declarations = element => {
  * @param {String} appearance Selected appearance.
  * @returns {String} Normalised CSS colour.
  */
-const expectedColour = (rgb, appearance) => appearance === 'opaque' ? `rgb(${rgb})` : `rgba(${rgb}, 0.78)`;
+const expectedColour = (rgb, appearance) => appearance === 'transparent' ? 'transparent' :
+    appearance === 'opaque' ? 'rgb(255, 255, 255)' : 'rgba(255, 255, 255, 0.78)';
 
 for (const [family, tag] of Object.entries(families)) {
-    for (const appearance of ['opaque', 'translucent']) {
+    for (const appearance of ['transparent', 'opaque', 'translucent']) {
         test(`${family}: ${appearance} preview, editable and readonly backgrounds in every result state`, () => {
             for (const phase of ['preview', 'editable', 'readonly']) {
                 for (const state of ['', ...Object.keys(states)]) {
@@ -87,7 +88,7 @@ for (const [family, tag] of Object.entries(families)) {
                     const prefix = preview ? 'preview-' : '';
                     const dom = new JSDOM(`<div class="que clozeonimage">
                         <div class="qtype-clozeonimage-${prefix}composition qtype-clozeonimage-appearance-${appearance}">
-                            <div class="qtype-clozeonimage-${prefix}subquestion">
+                            <div class="qtype-clozeonimage-${prefix}subquestion ${preview ? '' : 'qtype-clozeonimage-region'}">
                                 <span class="qtype-clozeonimage-feedback-region subquestion">
                                     <${renderedTag} id="surface" class="${controlClass} ${preview ? '' : state}" ${attributes}>
                                         ${scalar ? '' : contents}
@@ -130,23 +131,22 @@ for (const [family, tag] of Object.entries(families)) {
 }
 
 test('choice result layers consume appearance tokens; review overlays and popovers retain their presentation', () => {
-    for (const [state, token] of [['correct', 'correct'], ['incorrect', 'incorrect'], ['partiallycorrect', 'partial']]) {
-        const rule = css.nodes.find(node => node.selector?.includes(`.qtype-clozeonimage-choice.${state}::before`));
-        assert.equal(rule.nodes.find(node => node.prop === 'background-color').value,
-            `var(--qtype-clozeonimage-${token}-bg)`);
-    }
-    const overlay = css.nodes.find(node => node.selector?.endsWith(' .qtype-clozeonimage-review-surface'));
+    const choice = css.nodes.find(node => node.selector?.endsWith(' .qtype-clozeonimage-choice::before'));
+    assert.equal(choice.nodes.find(node => node.prop === 'background-color').value, 'transparent');
+    // Select the overlay base rule, not the grouped cursor rule that also ends with this selector.
+    const overlay = css.nodes.find(node => node.selector ===
+        '.que.clozeonimage .qtype-clozeonimage-region .qtype-clozeonimage-review-surface');
     assert.equal(overlay.nodes.find(node => node.prop === 'background-color').value, 'transparent');
     const popover = css.nodes.find(node => node.selector?.includes('.popover.qtype-clozeonimage-appearance-opaque'));
     assert.equal(popover.nodes.find(node => node.prop === '--qtype-clozeonimage-popover-bg').value,
-        'rgba(247, 247, 247, 0.94)');
+        '#fff');
 });
 
-for (const appearance of ['opaque', 'translucent']) {
+for (const appearance of ['transparent', 'opaque', 'translucent']) {
     test(`Clear C: ${appearance} neutral background is independent of the radio result`, () => {
         const dom = new JSDOM(`<div class="que clozeonimage">
             <div class="qtype-clozeonimage-composition qtype-clozeonimage-appearance-${appearance}">
-                <div class="qtype-clozeonimage-subquestion">
+                <div class="qtype-clozeonimage-subquestion qtype-clozeonimage-region">
                     <div class="qtype-clozeonimage-feedback-region" data-region="clozeonimage-multichoice">
                         <fieldset class="answer"><input type="radio" class="form-check-input"></fieldset>
                         <button type="button" class="qtype-clozeonimage-clear-choice"

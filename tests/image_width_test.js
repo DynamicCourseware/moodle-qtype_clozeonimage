@@ -57,7 +57,7 @@ for (const directory of ['src', 'build']) {
                         ranges.push({key, bounds: JSON.parse(JSON.stringify(bounds))});
                         return window.Promise.resolve(JSON.stringify(bounds));
                     },
-                }, {exception: error => errors.push(error)}, {init: () => undefined}).init(false);
+                }, {exception: error => errors.push(error)}, {init: () => undefined, updateCompositionHeight: () => undefined}, {}, {init: () => undefined}).init(false);
                 const file = directory === 'src' ? 'form.js' : 'form.min.js';
                 runInContext(readFileSync(path.join(__dirname, '../amd', directory, file), 'utf8'), dom.getInternalVMContext());
                 await window.Promise.resolve();

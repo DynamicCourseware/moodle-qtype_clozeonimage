@@ -25,9 +25,9 @@ const core = path.resolve(__dirname, '../../../../lib');
 const row = index => `<div id="fgroup_id_subquestionrow_${index}"
     class="qtype-clozeonimage-subquestion-row" data-groupname="subquestionrow[${index}]">
     <div class="col-form-label"><p aria-hidden="true" id="id_subquestionrow_${index}_label">
-        <span class="qtype-clozeonimage-row-number"><span>Subquestion</span> ${index + 1}</span></p></div>
+        <span class="qtype-clozeonimage-row-number" data-block-label="Block {blockno}">Block ${index + 1}</span></p></div>
     <div class="felement"><fieldset><legend class="visually-hidden">
-        <span class="qtype-clozeonimage-row-number"><span>Subquestion</span> ${index + 1}</span></legend>
+        <span class="qtype-clozeonimage-row-number" data-block-label="Block {blockno}">Block ${index + 1}</span></legend>
     <span class="qtype-clozeonimage-move d-none"><button type="button" data-drag-type="move"
         title="Move subquestion ${index + 1}" aria-label="Move subquestion ${index + 1}">Move</button></span>
     <input type="hidden" name="roworigin[${index}]" value="${index + 1}">
@@ -37,18 +37,28 @@ const row = index => `<div id="fgroup_id_subquestionrow_${index}"
     <label for="id_anchor_${index}_0">Top left</label>
     <input type="radio" id="id_anchor_${index}_4" name="anchor[${index}]" value="4" ${index === 0 ? '' : 'checked'}>
     <label for="id_anchor_${index}_4">Centre</label>
-    <textarea id="id_subquestion_${index}" name="subquestion[${index}]" aria-label="Source ${index + 1}"
+    <textarea id="id_subquestion_${index}" name="subquestion[${index}][text]" aria-label="Source ${index + 1}"
         aria-describedby="id_error_subquestionrow_${index}">Source ${index}</textarea>
     <div class="form-control-feedback" id="id_error_subquestionrow_${index}">
         <span class="visually-hidden">Subquestion ${index + 1}: </span>Error</div></fieldset></div></div>`;
-const setup = directory => {
-    const dom = new JSDOM(`<form class="mform" data-qtype="clozeonimage">${[0, 1, 2].map(row).join('')}
-        <button type="submit">Save</button></form>
+const setup = (directory, atomic = true, focusTarget = null) => {
+    const dom = new JSDOM(`<form class="mform" data-qtype="clozeonimage"><div id="qtype-clozeonimage-rows">${[0, 1, 2].map(row).join('')}<div><button name="addsubquestions" type="button">Add</button></div></div>
+        <input name="blockorder"><input name="blockfocusorigin"><input name="blockfocuskind">
+        <button name="rebuildblocks" type="submit">Rebuild</button><button type="submit">Save</button></form>
         ${[0, 2].map(index => `<div class="qtype-clozeonimage-preview-subquestion" data-row-index="${index}">
             <span class="qtype-clozeonimage-preview-number">${index + 1}</span></div>`).join('')}`,
     {runScripts: 'outside-only', url: 'https://example.test/'});
     const {window} = dom;
     const {document} = window;
+    if (atomic) {
+        // Emulate the API for core interaction tests; real iframe preservation is tested in Chromium.
+        window.Element.prototype.moveBefore = function(node, before) { this.insertBefore(node, before); };
+    }
+    const submissions = [];
+    document.querySelector('form').addEventListener('submit', event => {
+        event.preventDefault();
+        submissions.push(Object.fromEntries(new window.FormData(event.target)));
+    });
     const run = filename => runInContext(readFileSync(filename, 'utf8'), dom.getInternalVMContext());
     run(path.join(core, 'jquery/jquery-3.7.1.js'));
     const $ = window.jQuery;
@@ -82,10 +92,11 @@ const setup = directory => {
             return sortable;
         };
         CaptureSortable.EVENTS = window.CoreSortable.EVENTS;
-        window.Reorder = args.at(-1)($, CaptureSortable);
+        window.Reorder = args.at(-1)($, CaptureSortable, {getInstanceForElement: () => null},
+            {exception: error => errors.push(error)});
     };
     run(path.join(__dirname, '../amd', directory, directory === 'src' ? 'reorder.js' : 'reorder.min.js'));
-    window.Reorder.init();
+    window.Reorder.init(false, focusTarget);
     const list = document.getElementById('qtype-clozeonimage-rows');
     const mouseStart = target => $(target).trigger($.Event('mousedown', {which: 1, pageX: 10, pageY: 10}));
     const mouseDrop = destination => {
@@ -93,7 +104,7 @@ const setup = directory => {
         destination.getBoundingClientRect = () => ({left: 0, top: 0, width: 100, height: 100});
         $(window).trigger($.Event('mouseup', {pageX: 20, pageY: 90, clientX: 20, clientY: 90}));
     };
-    return {dom, window, document, $, list, errors, getSortable: () => sortable, mouseStart, mouseDrop,
+    return {dom, window, document, $, list, errors, submissions, getSortable: () => sortable, mouseStart, mouseDrop,
         getModal: () => modal};
 };
 const waitFor = async condition => {
@@ -126,11 +137,11 @@ for (const directory of ['src', 'build']) {
             assert.equal(proxy.querySelectorAll('[name], [id]').length, 0);
             assert.equal(list.querySelectorAll('input[type="radio"]:checked:not(:disabled)').length, 3);
             const keys = [...new window.FormData(document.querySelector('form')).keys()];
-            assert.equal(keys.filter(k => k === 'subquestion[0]').length, 1);
+            assert.equal(keys.filter(k => k === 'subquestion[0][text]').length, 1);
             mouseDrop(list.children[2]);
             assert.equal(list.lastElementChild, moved);
             assert.equal(source.value, '{1:SHORTANSWER:=Edited answer}');
-            assert.equal(source.name, 'subquestion[2]');
+            assert.equal(source.name, 'subquestion[2][text]');
             assert.equal(document.activeElement, source);
             assert.equal(source.selectionStart, 4);
             assert.equal(source.selectionEnd, 10);
@@ -138,7 +149,7 @@ for (const directory of ['src', 'build']) {
             assert.equal(moved.dataset.groupname, 'subquestionrow[0]');
             assert.equal(moved.querySelector('button').closest('[aria-hidden="true"]'), null);
             assert.equal(moved.querySelectorAll('button').length, 1);
-            assert.equal(moved.querySelector('legend .qtype-clozeonimage-row-number').textContent, 'Subquestion 3');
+            assert.equal(moved.querySelector('legend .qtype-clozeonimage-row-number').textContent, 'Block 3');
             assert.equal(moved.querySelector('label').htmlFor, moved.querySelector('[type="radio"]').id);
             assert.deepEqual([...list.querySelectorAll('[type="radio"]:checked')].map(input => input.value), ['4', '4', '0']);
             assert.deepEqual([...list.querySelectorAll('[name^="roworigin"]')].map(input => input.value), ['2', '3', '1']);
@@ -165,7 +176,7 @@ for (const directory of ['src', 'build']) {
             document.querySelector('[data-core_sortable_list-quickmove]').click();
             await window.Promise.resolve();
             assert.equal(list.firstElementChild, added);
-            assert.equal(added.querySelector('textarea').name, 'subquestion[0]');
+            assert.equal(added.querySelector('textarea').name, 'subquestion[0][text]');
             assert.equal(document.activeElement, handle);
             handle.click();
             await waitFor(() => document.querySelector('[role="dialog"]'));
@@ -190,10 +201,59 @@ for (const directory of ['src', 'build']) {
             getSortable().moveElement(fixture.$(list), fixture.$());
             window.dispatchEvent(new window.KeyboardEvent('keypress', {key: 'Escape', keyCode: 27, bubbles: true}));
             assert.equal(list.firstElementChild, first);
-            assert.equal(first.querySelector('textarea').name, 'subquestion[0]');
+            assert.equal(first.querySelector('textarea').name, 'subquestion[0][text]');
             assert.equal(window.document.activeElement, handle);
         } finally {
             dom.window.close();
         }
+    });
+}
+
+for (const directory of ['src', 'build']) {
+    test(`${directory}: fallback mouse drop requests a rebuild without detaching editors`, () => {
+        const fixture = setup(directory, false);
+        const {dom, list, mouseStart, mouseDrop, submissions} = fixture;
+        try {
+            const original = Array.from(list.children);
+            mouseStart(original[0].querySelector('button'));
+            mouseDrop(original[2]);
+            assert.deepEqual(Array.from(list.children), original);
+            assert.equal(submissions.length, 1);
+            assert.equal(submissions[0].blockorder, '1,2,0');
+            assert.equal(submissions[0].blockfocusorigin, '1');
+            assert.equal(submissions[0].blockfocuskind, 'handle');
+            assert.equal(submissions[0]['subquestion[0][text]'], 'Source 0');
+        } finally { dom.window.close(); }
+    });
+    test(`${directory}: fallback keyboard drop and cancellation keep the live DOM intact`, async() => {
+        const fixture = setup(directory, false);
+        const {dom, document, list, getModal, submissions} = fixture;
+        try {
+            const original = Array.from(list.children);
+            original[2].querySelector('button').click();
+            await waitFor(() => document.querySelector('[data-core_sortable_list-quickmove]'));
+            document.querySelector('[data-core_sortable_list-quickmove]').click();
+            await dom.window.Promise.resolve();
+            assert.deepEqual(Array.from(list.children), original);
+            assert.equal(submissions.length, 1);
+            assert.equal(submissions[0].blockorder, '2,0,1');
+            assert.equal(submissions[0].blockfocusorigin, '3');
+            original[0].querySelector('button').click();
+            await waitFor(() => document.querySelector('[role="dialog"]'));
+            getModal().hide();
+            assert.equal(submissions.length, 1);
+            assert.deepEqual(Array.from(list.children), original);
+        } finally { dom.window.close(); }
+    });
+}
+
+for (const directory of ['src', 'build']) {
+    test(`${directory}: no remaining focus row returns focus to Add after relocating QuickForm actions`, () => {
+        const {dom, document, list} = setup(directory, true, {index: null, kind: 'checkbox'});
+        try {
+            const button = document.querySelector('[name="addsubquestions"]');
+            assert.equal(list.contains(button), false);
+            assert.equal(document.activeElement, button);
+        } finally { dom.window.close(); }
     });
 }

@@ -88,7 +88,7 @@ const radios = (selected, hidden, locked = false, graded = false, name = 'answer
                 <label for="${name}-${value}">Choice ${value}</label>
             `).join('')}
         </fieldset>
-        ${locked ? '' : `<button type="button" data-action="clozeonimage-clear-choice" ${hidden ? 'hidden' : ''}>C</button>`}
+        ${locked ? '' : `<button type="button" data-action="clozeonimage-clear-choice" ${hidden ? 'hidden' : ''}>←</button>`}
     </div>`;
 
 /**
@@ -123,8 +123,10 @@ test('feedback controls have no plugin outer focus outline or pointer-focus CSS 
     const css = readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8');
     assert.equal(css.includes('qtype-clozeonimage-pointer-focus'), false);
     postcss.parse(css).walkRules(rule => {
-        // The independently scrollable frame has its own keyboard entry point, unlike a feedback control.
-        if (rule.selector === '.qtype-clozeonimage-panorama-active .qtype-clozeonimage-panorama:focus-visible') {
+        // The authoring colour picker is a separate keyboard control, outside student feedback.
+        if (rule.selector === '.qtype-clozeonimage-composition-resize:focus-visible' ||
+                rule.selector === 'form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-color input:focus-visible') {
+            assert.equal(rule.nodes.find(node => node.prop === 'outline').value, '2px solid currentColor');
             return;
         }
         if (!rule.selector.includes(':focus') || rule.selector.includes('.qtype-clozeonimage-clear-choice')) {
@@ -159,7 +161,7 @@ test('dark rounded keyboard focus applies only to non-editable review controls w
     assert.equal(focusRules.length, 1);
     assert.equal(semanticRules.length, 3);
     const focusRule = focusRules[0];
-    assert.ok(focusRule.selector.startsWith('.que.clozeonimage .qtype-clozeonimage-subquestion '));
+    assert.ok(focusRule.selector.startsWith('.que.clozeonimage .qtype-clozeonimage-region '));
     assert.ok(focusRule.selector.endsWith(':focus-visible'));
     assert.deepEqual(focusRule.nodes.filter(node => node.type === 'decl').map(node => node.prop),
         ['border-radius', 'box-shadow']);
@@ -173,13 +175,13 @@ test('dark rounded keyboard focus applies only to non-editable review controls w
         <select class="form-select" data-family="dropdown"><option>Choice</option></select>
         <input type="radio" class="form-check-input" data-family="radio">
         <input type="checkbox" class="form-check-input" data-family="checkbox">
-        <button class="qtype-clozeonimage-clear-choice" data-family="Clear">C</button>
+        <button class="qtype-clozeonimage-clear-choice" data-family="Clear">←</button>
         <button class="qtype-clozeonimage-review-surface" data-family="dropdown review" data-review>Feedback</button>
         <button class="qtype-clozeonimage-review-surface" data-family="radio review" data-review>Feedback</button>
         <button class="qtype-clozeonimage-review-surface" data-family="checkbox review" data-review>Feedback</button>`;
     const dom = new JSDOM(`
-        <div class="que clozeonimage"><div class="qtype-clozeonimage-subquestion">${controls}</div></div>
-        <div class="que other"><div class="qtype-clozeonimage-subquestion">${controls}</div></div>`);
+        <div class="que clozeonimage"><div class="qtype-clozeonimage-region">${controls}</div></div>
+        <div class="que other"><div class="qtype-clozeonimage-region">${controls}</div></div>`);
     try {
         // Match only the structural part; browser focus-visible heuristics/pixels are not emulated here.
         const selector = focusRule.selector.replace(':focus-visible', '');
@@ -196,7 +198,7 @@ test('dark rounded keyboard focus applies only to non-editable review controls w
                     return;
                 }
                 // Only the review button's native outline is suppressed; editable controls and semantic outlines stay intact.
-                assert.equal(rule.selector, '.que.clozeonimage .qtype-clozeonimage-subquestion ' +
+                assert.equal(rule.selector, '.que.clozeonimage .qtype-clozeonimage-region ' +
                     '.qtype-clozeonimage-review-surface:focus-visible');
                 assert.equal(rule.selector.includes('.form-control'), false);
                 assert.equal(rule.selector.includes('.form-select'), false);
@@ -215,13 +217,16 @@ test('dropdown review geometry excludes mb-1 only with semantic state and keyboa
             rules.push(rule);
         }
     });
-    assert.equal(rules.length, 1);
+    assert.equal(rules.length, 2);
     const rule = rules[0];
-    assert.ok(rule.selector.startsWith('.que.clozeonimage .qtype-clozeonimage-subquestion'));
+    assert.ok(rules[1].selector.includes('.qtype-clozeonimage-block\n'));
+    assert.ok(!rules[1].selector.includes('.qtype-clozeonimage-block-auto'));
+    assert.deepEqual(rules[1].nodes.map(node => [node.prop, node.value]), [['bottom', '0']]);
+    assert.ok(rule.selector.startsWith('.que.clozeonimage .qtype-clozeonimage-region'));
     assert.ok(rule.selector.endsWith(' + .qtype-clozeonimage-review-surface:focus-visible'));
     assert.deepEqual(rule.nodes.map(node => [node.prop, node.value]), [['bottom', '.25rem']]);
 
-    const dom = new JSDOM('<div class="que clozeonimage"><div class="qtype-clozeonimage-subquestion">' +
+    const dom = new JSDOM('<div class="que clozeonimage"><div class="qtype-clozeonimage-region">' +
         '<span class="subquestion qtype-clozeonimage-feedback-region"></span></div></div>');
     try {
         const region = dom.window.document.querySelector('.qtype-clozeonimage-feedback-region');
@@ -849,6 +854,40 @@ for (const directory of ['src', 'build']) {
                 input.dispatchEvent(down);
                 assert.equal(down.defaultPrevented, false, input.id);
             }
+        } finally {
+            dom.window.close();
+        }
+    });
+}
+
+for (const directory of ['src', 'build']) {
+    test(`${directory}: numerical error descriptions survive Bootstrap popover lifecycle and input reset`, () => {
+        const {dom, document, window, popover} = setup(`
+            <span class="qtype-clozeonimage-feedback-region">
+                <input id="numerical" aria-invalid="true" aria-describedby="numerical-error" value="abc"
+                    class="form-control qtype-clozeonimage-feedback-trigger" data-bs-toggle="popover">
+                <span id="numerical-error" class="qtype-clozeonimage-numerical-validation">Invalid number</span>
+            </span>
+            <div id="feedback-popup" class="popover show">Feedback</div>`, directory);
+        try {
+            const field = document.getElementById('numerical');
+            // Bootstrap show replaces aria-describedby before it emits inserted.bs.popover.
+            field.setAttribute('aria-describedby', 'feedback-popup');
+            field.dispatchEvent(new window.Event('inserted.bs.popover', {bubbles: true}));
+            assert.deepEqual(field.getAttribute('aria-describedby').split(' '), ['feedback-popup', 'numerical-error']);
+            let hidden = 0;
+            popover.hide = () => hidden++;
+            field.dispatchEvent(new window.KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+            assert.equal(hidden, 1, 'Escape finds the popover among multiple description IDs');
+            // Bootstrap hide removes aria-describedby before it emits hidden.bs.popover.
+            field.removeAttribute('aria-describedby');
+            field.dispatchEvent(new window.Event('hidden.bs.popover', {bubbles: true}));
+            assert.equal(field.getAttribute('aria-describedby'), 'numerical-error');
+            field.value = 'def';
+            field.dispatchEvent(new window.Event('input', {bubbles: true}));
+            assert.equal(field.hasAttribute('data-bs-toggle'), false);
+            assert.equal(field.getAttribute('aria-describedby'), 'numerical-error');
+            assert.equal(field.getAttribute('aria-invalid'), 'true');
         } finally {
             dom.window.close();
         }

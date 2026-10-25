@@ -11,113 +11,41 @@
     overflow: visible;
 }
 
-/* Contain the image's intrinsic width without changing Moodle's page layout. */
-.que.clozeonimage.qtype-clozeonimage-panorama-active,
-.que.clozeonimage.qtype-clozeonimage-panorama-active > .content {
-    min-width: 0;
-    max-width: 100%;
-}
-
-/* Stack Info only while this question is in panoramic view. */
-.que.clozeonimage.qtype-clozeonimage-panorama-active {
-    flex-direction: column;
-}
-
-.que.clozeonimage.qtype-clozeonimage-panorama-active > .info,
-.que.clozeonimage.qtype-clozeonimage-panorama-active > .content {
-    width: 100%;
-}
-
-.qtype-clozeonimage-panorama-active .qtype-clozeonimage-panorama-anchor {
-    /* Pass formulation styling through to the viewport, including its breakout area. */
-    background: inherit;
-    border-color: inherit;
-    border-radius: inherit;
-    contain: inline-size;
-    min-width: 0;
-    position: relative;
-}
-
-.qtype-clozeonimage-panorama-active .qtype-clozeonimage-scroll.qtype-clozeonimage-panorama {
-    --qtype-clozeonimage-panorama-gutter: 10px;
-    background: inherit;
-    border: var(--bs-border-width) solid;
-    border-color: transparent;
-    border-left-color: inherit;
-    border-right-color: inherit;
-    border-radius: inherit;
-    box-sizing: border-box;
-    max-width: none;
-    min-width: 0;
+.qtype-clozeonimage-preview-scroll {
     overflow-x: auto;
     direction: ltr;
     overscroll-behavior-x: contain;
-    scroll-padding-inline: var(--qtype-clozeonimage-panorama-gutter);
-    overflow-anchor: none;
 }
 
-.qtype-clozeonimage-panorama-active .qtype-clozeonimage-panorama:focus-visible {
-    outline: var(--bs-focus-ring-width) solid var(--bs-primary);
-    outline-offset: calc(-1 * var(--bs-focus-ring-width));
-}
-
-/* Paint only the breakout wings, outside the scrolling content and without intercepting input. */
-.qtype-clozeonimage-panorama-active .qtype-clozeonimage-panorama-anchor::before,
-.qtype-clozeonimage-panorama-active .qtype-clozeonimage-panorama-anchor::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: var(--panorama-left);
-    width: var(--panorama-width);
-    box-sizing: border-box;
-    border: var(--bs-border-width) solid;
-    border-color: inherit;
-    border-radius: inherit;
-    pointer-events: none;
-    z-index: 1;
-}
-
-.qtype-clozeonimage-panorama-active .qtype-clozeonimage-panorama-anchor::before {
-    clip-path: inset(0 calc(100% - var(--panorama-left-wing)) 0 0);
-}
-
-.qtype-clozeonimage-panorama-active .qtype-clozeonimage-panorama-anchor::after {
-    clip-path: inset(0 0 0 calc(100% - var(--panorama-right-wing)));
-}
-
-.qtype-clozeonimage-panorama-active .qtype-clozeonimage-panorama-track {
+.qtype-clozeonimage-preview-track {
     box-sizing: content-box;
+    /* These gutters belong to the scrollable track, outside the composition. */
+    padding: 0;
     position: relative;
-    /* Retain the vertical gutters around the measured full visual canvas. */
-    padding-top: 12px;
-    padding-bottom: 16px;
-}
-
-.qtype-clozeonimage-panorama-active .qtype-clozeonimage-panorama .qtype-clozeonimage-composition {
-    display: block;
-    width: max-content;
-}
-
-.qtype-clozeonimage-panorama-active .qtype-clozeonimage-panorama-can-drag .qtype-clozeonimage-image {
-    cursor: grab;
-    touch-action: pan-y pinch-zoom;
-    user-select: none;
-}
-
-.qtype-clozeonimage-panorama-active .qtype-clozeonimage-panorama-dragging,
-.qtype-clozeonimage-panorama-active .qtype-clozeonimage-panorama-dragging .qtype-clozeonimage-image {
-    cursor: grabbing;
-    user-select: none;
+    overflow-anchor: none;
 }
 
 .qtype-clozeonimage-composition,
 .qtype-clozeonimage-preview-composition {
-    --qtype-clozeonimage-neutral-bg: rgba(245, 245, 245, 0.78);
+    --qtype-clozeonimage-neutral-bg: rgba(255, 255, 255, 0.78);
     --qtype-clozeonimage-neutral-option-bg: #f7f7f7;
     display: inline-block;
     position: relative;
     vertical-align: top;
+}
+
+/* Decorate the full image/block union without changing its coordinate system or box sizes. */
+.qtype-clozeonimage-composition::after,
+.qtype-clozeonimage-preview-composition::after {
+    content: "";
+    position: absolute;
+    left: var(--clozeonimage-bound-left, 0);
+    top: var(--clozeonimage-bound-top, 0);
+    width: var(--clozeonimage-bound-width, 100%);
+    height: var(--clozeonimage-bound-height, 100%);
+    box-sizing: border-box;
+    border: 1px solid #d3d3d3;
+    pointer-events: none;
 }
 
 .qtype-clozeonimage-image,
@@ -134,39 +62,58 @@
     width: max-content;
 }
 
+.qtype-clozeonimage-preview-composition.qtype-clozeonimage-appearance-transparent,
+.que.clozeonimage .qtype-clozeonimage-appearance-transparent {
+    --qtype-clozeonimage-neutral-bg: transparent;
+}
+
 .qtype-clozeonimage-preview-composition.qtype-clozeonimage-appearance-translucent,
-.que.clozeonimage .qtype-clozeonimage-composition.qtype-clozeonimage-appearance-translucent {
+.que.clozeonimage .qtype-clozeonimage-appearance-translucent {
+    --qtype-clozeonimage-neutral-bg: rgba(255, 255, 255, 0.78);
+}
+
+.qtype-clozeonimage-preview-composition.qtype-clozeonimage-appearance-opaque,
+.que.clozeonimage .qtype-clozeonimage-appearance-opaque {
+    --qtype-clozeonimage-neutral-bg: #fff;
+}
+
+.qtype-clozeonimage-preview-composition,
+.que.clozeonimage :is(.qtype-clozeonimage-appearance-transparent,
+.qtype-clozeonimage-appearance-translucent, .qtype-clozeonimage-appearance-opaque) {
+    --qtype-clozeonimage-neutral-option-bg: #fff;
     --qtype-clozeonimage-control-bg: var(--qtype-clozeonimage-neutral-bg);
     --qtype-clozeonimage-disabled-control-bg: var(--qtype-clozeonimage-neutral-bg);
     --qtype-clozeonimage-choice-panel-bg: var(--qtype-clozeonimage-neutral-bg);
     --qtype-clozeonimage-unchecked-control-bg: var(--qtype-clozeonimage-neutral-bg);
-    --qtype-clozeonimage-checked-control-bg: rgba(var(--bs-primary-rgb), 0.5);
-    --qtype-clozeonimage-specific-feedback-bg: rgba(255, 243, 191, 0.4);
-    --qtype-clozeonimage-outcome-bg: rgba(253, 243, 228, 0.8);
-    --qtype-clozeonimage-correct-bg: rgba(168, 240, 168, 0.78);
-    --qtype-clozeonimage-incorrect-bg: rgba(255, 184, 184, 0.78);
-    --qtype-clozeonimage-partial-bg: rgba(240, 240, 168, 0.78);
+    --qtype-clozeonimage-checked-control-bg: var(--qtype-clozeonimage-neutral-bg);
+    --qtype-clozeonimage-specific-feedback-bg: #fff;
+    --qtype-clozeonimage-outcome-bg: #fff;
+    --qtype-clozeonimage-correct-bg: var(--qtype-clozeonimage-neutral-bg);
+    --qtype-clozeonimage-incorrect-bg: var(--qtype-clozeonimage-neutral-bg);
+    --qtype-clozeonimage-partial-bg: var(--qtype-clozeonimage-neutral-bg);
     --qtype-clozeonimage-correct-border: #00a000;
     --qtype-clozeonimage-incorrect-border: #e00000;
     --qtype-clozeonimage-partial-border: #e0e000;
 }
 
-.qtype-clozeonimage-preview-composition.qtype-clozeonimage-appearance-opaque,
-.que.clozeonimage .qtype-clozeonimage-composition.qtype-clozeonimage-appearance-opaque {
-    --qtype-clozeonimage-neutral-bg: #f5f5f5;
-    --qtype-clozeonimage-control-bg: var(--qtype-clozeonimage-neutral-bg);
-    --qtype-clozeonimage-disabled-control-bg: var(--qtype-clozeonimage-neutral-bg);
-    --qtype-clozeonimage-choice-panel-bg: var(--qtype-clozeonimage-neutral-bg);
-    --qtype-clozeonimage-unchecked-control-bg: var(--qtype-clozeonimage-neutral-bg);
-    --qtype-clozeonimage-checked-control-bg: rgb(var(--bs-primary-rgb));
-    --qtype-clozeonimage-specific-feedback-bg: #fff3bf;
-    --qtype-clozeonimage-outcome-bg: #fdf3e4;
-    --qtype-clozeonimage-correct-bg: #a8f0a8;
-    --qtype-clozeonimage-incorrect-bg: #ffb8b8;
-    --qtype-clozeonimage-partial-bg: #f0f0a8;
-    --qtype-clozeonimage-correct-border: #00a000;
-    --qtype-clozeonimage-incorrect-border: #e00000;
-    --qtype-clozeonimage-partial-border: #e0e000;
+.qtype-clozeonimage-block-appearance-transparent {
+    --qtype-clozeonimage-block-bg: transparent;
+    --qtype-clozeonimage-block-border: transparent;
+}
+
+.qtype-clozeonimage-block-appearance-translucent {
+    --qtype-clozeonimage-block-bg: rgba(255, 255, 255, 0.78);
+    --qtype-clozeonimage-block-border: #ced4da;
+}
+
+.qtype-clozeonimage-block-appearance-opaque {
+    --qtype-clozeonimage-block-bg: #fff;
+    --qtype-clozeonimage-block-border: #ced4da;
+}
+
+/* Independent paint layers; all modes reserve the same border thickness. */
+.qtype-clozeonimage-block {
+    background-color: var(--qtype-clozeonimage-block-bg, transparent);
 }
 
 .qtype-clozeonimage-preview-subquestion {
@@ -177,6 +124,29 @@
 
 .qtype-clozeonimage-preview-dragging {
     cursor: grabbing;
+}
+
+.qtype-clozeonimage-preview-selection-mark {
+    display: none;
+    position: absolute;
+    top: 1px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    color: #374151;
+    font: 600 14px/16px sans-serif;
+    text-align: center;
+    pointer-events: none;
+}
+
+.qtype-clozeonimage-preview-selected > .qtype-clozeonimage-preview-selection-mark {
+    display: block;
+}
+
+.qtype-clozeonimage-preview-resizing {
+    cursor: ew-resize;
 }
 
 #qtype-clozeonimage-preview-composition .qtype-clozeonimage-preview-subquestion * {
@@ -194,7 +164,7 @@
 }
 
 .qtype-clozeonimage-preview-subquestion .answer,
-.que.clozeonimage .qtype-clozeonimage-subquestion .answer {
+.que.clozeonimage .qtype-clozeonimage-region .answer {
     border: var(--bs-border-width) solid var(--bs-gray-500);
     border-radius: var(--bs-border-radius);
     box-sizing: border-box;
@@ -205,92 +175,94 @@
 /* Teacher positioning preview. */
 .qtype-clozeonimage-preview-subquestion .answer,
 .qtype-clozeonimage-preview-subquestion .form-control:disabled,
-.qtype-clozeonimage-preview-subquestion .form-select:disabled {
+.qtype-clozeonimage-preview-subquestion .form-select:disabled,
+.qtype-clozeonimage-preview-subquestion .form-check-input:disabled {
     background-color: var(--qtype-clozeonimage-control-bg);
     border-color: var(--bs-gray-500);
+    color: var(--bs-body-color);
+    opacity: 1;
 }
 
 /* Student attempt and review. Moodle does not expose its formulation background as a CSS variable. */
-.que.clozeonimage .qtype-clozeonimage-subquestion {
+.que.clozeonimage .qtype-clozeonimage-region {
     --qtype-clozeonimage-choice-bg: #e6f2f5;
     --qtype-clozeonimage-choice-bg-rgb: 230, 242, 245;
 }
 
-.que.clozeonimage .qtype-clozeonimage-subquestion .form-control,
-.que.clozeonimage .qtype-clozeonimage-subquestion .form-select {
+.que.clozeonimage .qtype-clozeonimage-region .form-control,
+.que.clozeonimage .qtype-clozeonimage-region .form-select {
     border-color: var(--bs-gray-500);
 }
 
-.que.clozeonimage .qtype-clozeonimage-subquestion .form-control:not(:disabled):not([readonly]),
-.que.clozeonimage .qtype-clozeonimage-subquestion .form-select:not(:disabled) {
+.que.clozeonimage .qtype-clozeonimage-region .form-control:not(:disabled):not([readonly]),
+.que.clozeonimage .qtype-clozeonimage-region .form-select:not(:disabled) {
     background-color: var(--qtype-clozeonimage-control-bg);
     color: var(--bs-body-color);
 }
 
-.que.clozeonimage .qtype-clozeonimage-subquestion .answer:has(.form-check-input:not(:disabled)) {
+.que.clozeonimage .qtype-clozeonimage-region .answer:has(.form-check-input:not(:disabled)) {
     background-color: var(--qtype-clozeonimage-choice-panel-bg);
     color: var(--bs-body-color);
 }
 
-.que.clozeonimage .qtype-clozeonimage-subquestion
-.answer .form-check-input:not(:checked):not(:indeterminate) {
+.que.clozeonimage .qtype-clozeonimage-region
+.answer .form-check-input:not(:checked) {
     background-color: var(--qtype-clozeonimage-unchecked-control-bg);
 }
 
-.que.clozeonimage .qtype-clozeonimage-subquestion .answer .form-check-input:checked {
+.que.clozeonimage .qtype-clozeonimage-region .answer .form-check-input:checked {
     background-color: var(--qtype-clozeonimage-checked-control-bg);
 }
 
+.que.clozeonimage .qtype-clozeonimage-region .form-check-input[type="radio"]:checked {
+    background-image: url("[[pix:qtype_clozeonimage|answer-radio]]");
+}
+
+.que.clozeonimage .qtype-clozeonimage-region .form-check-input[type="checkbox"]:checked {
+    background-image: url("[[pix:qtype_clozeonimage|answer-checkbox]]");
+}
+
 /* Submitted attempt and review. */
-.que.clozeonimage .qtype-clozeonimage-subquestion .form-control[readonly],
-.que.clozeonimage .qtype-clozeonimage-subquestion .form-control:disabled,
-.que.clozeonimage .qtype-clozeonimage-subquestion .form-select:disabled {
+.que.clozeonimage .qtype-clozeonimage-region .form-control[readonly],
+.que.clozeonimage .qtype-clozeonimage-region .form-control:disabled,
+.que.clozeonimage .qtype-clozeonimage-region .form-select:disabled {
     background-color: var(--qtype-clozeonimage-disabled-control-bg);
     color: var(--bs-body-color);
     opacity: 1;
 }
 
-.que.clozeonimage .qtype-clozeonimage-subquestion .answer:has(.form-check-input:disabled) {
+.que.clozeonimage .qtype-clozeonimage-region .answer:has(.form-check-input:disabled) {
     background-color: var(--qtype-clozeonimage-choice-panel-bg);
     color: var(--bs-body-color);
 }
 
-.que.clozeonimage
-.qtype-clozeonimage-subquestion
-fieldset.answer > .form-check-inline,
-.que.clozeonimage
-.qtype-clozeonimage-subquestion
-table.answer > tbody > tr > .form-check-inline {
-    vertical-align: top;
-}
-
-.que.clozeonimage .qtype-clozeonimage-subquestion .answer .specificfeedback,
-.que.clozeonimage .qtype-clozeonimage-subquestion .answer .specificfeedback * {
+.que.clozeonimage .qtype-clozeonimage-region .answer .specificfeedback {
     background-color: var(--qtype-clozeonimage-specific-feedback-bg);
 }
 
-.que.clozeonimage .qtype-clozeonimage-subquestion .outcome {
+.que.clozeonimage .qtype-clozeonimage-region .outcome {
     background-color: var(--qtype-clozeonimage-outcome-bg);
 }
 
-.qtype-clozeonimage-preview-subquestion table.answer,
-.que.clozeonimage .qtype-clozeonimage-subquestion table.answer {
-    border-collapse: separate;
-    border-spacing: 0;
-}
-
-.que.clozeonimage .qtype-clozeonimage-subquestion table.answer:not(.table) > tbody,
-.que.clozeonimage .qtype-clozeonimage-subquestion table.answer:not(.table) > tbody > tr,
-.que.clozeonimage .qtype-clozeonimage-subquestion table.answer:not(.table) > tbody > tr > td {
-    border-width: 0;
-}
-
-.que.clozeonimage .qtype-clozeonimage-subquestion .answer
+.qtype-clozeonimage-preview-subquestion .form-check-input:disabled,
+.qtype-clozeonimage-preview-subquestion .form-check-input:disabled ~ .form-check-label,
+.que.clozeonimage .qtype-clozeonimage-region .form-check-input:disabled,
+.que.clozeonimage .qtype-clozeonimage-region .answer
 .form-check-input:disabled ~ .form-check-label {
     opacity: 1;
 }
 
 .que.clozeonimage .qtype-clozeonimage-numerical-validation {
+    /* Anchor to the control, outside layout sizing. Only the message is raised above
+       local controls (layers 0–2); it cannot intercept neighbouring controls. */
+    position: absolute;
+    top: 100%;
+    left: 0;
+    width: max-content;
+    max-width: none;
+    white-space: nowrap;
+    z-index: 3;
+    pointer-events: none;
     background-color: var(--bs-danger-bg-subtle);
     border: var(--bs-border-width) solid var(--bs-danger-border-subtle);
     border-radius: var(--bs-border-radius);
@@ -298,20 +270,35 @@ table.answer > tbody > tr > .form-check-inline {
     display: table;
     margin-top: .25rem;
     padding: .25rem .5rem;
+    transform: translateX(var(--clozeonimage-validation-offset, 0));
+}
+
+.qtype-clozeonimage-validation-arrow {
+    display: inline-block;
+    font-size: .875em;
+    margin-right: .25em;
+    /* Without measured alignment, keep the translated message but do not point at another field. */
+    visibility: hidden;
+}
+
+.qtype-clozeonimage-validation-aligned .qtype-clozeonimage-validation-arrow {
+    visibility: visible;
 }
 
 .qtype-clozeonimage-preview-number {
     position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    bottom: 100%;
+    left: 0;
     pointer-events: none;
     font-weight: 700;
+    line-height: 1.2;
+    padding: .125rem .35rem;
+    border: 1px solid #d3d3d3;
+    border-radius: .25rem;
+    background-color: var(--qtype-clozeonimage-block-bg, transparent);
 }
 
 .qtype-clozeonimage-source {
-    font-family: monospace;
     min-width: 0;
     width: 100%;
 }
@@ -319,7 +306,7 @@ table.answer > tbody > tr > .form-check-inline {
 form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-column-headings,
 form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-subquestion-row {
     display: grid;
-    grid-template-columns: 6rem 5rem 5rem 80px minmax(0, 1fr);
+    grid-template-columns: 1.25rem 6rem repeat(3, 5rem) 80px minmax(0, 1fr);
     column-gap: 1rem;
 }
 
@@ -365,7 +352,7 @@ form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-subquestion-row.fitem 
     align-self: start;
     column-gap: .5rem;
     flex-wrap: nowrap;
-    grid-column: 1;
+    grid-column: 2;
     max-width: none;
     min-height: 2.5rem;
     padding-left: 0;
@@ -389,7 +376,7 @@ form.mform[data-qtype="clozeonimage"] .col-form-label .qtype-clozeonimage-row-nu
 }
 
 form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-subquestion-row > .felement {
-    grid-column: 2 / 6;
+    grid-column: 3 / -1;
     max-width: none;
     padding-left: 0;
     padding-right: 0;
@@ -399,7 +386,7 @@ form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-subquestion-row > .fel
 form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-subquestion-row fieldset > .d-flex {
     align-items: start;
     display: grid !important; /* stylelint-disable-line declaration-no-important */
-    grid-template-columns: 5rem 5rem 80px minmax(0, 1fr);
+    grid-template-columns: repeat(3, 5rem) 80px minmax(0, 1fr);
     column-gap: 1rem;
 }
 
@@ -443,28 +430,29 @@ form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-anchor-grid .qtype-clo
 @media (max-width: 575.98px) {
     form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-column-headings,
     form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-subquestion-row {
-        grid-template-columns: 6rem minmax(0, 1fr);
+        grid-template-columns: 1.25rem 6rem minmax(0, 1fr);
     }
 
     form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-left-heading {
-        grid-column: 2;
+        grid-column: 3;
     }
 
+    form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-width-heading,
     form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-top-heading {
-        grid-column: 2;
+        grid-column: 3;
     }
 
     form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-source-heading {
-        grid-column: 2;
+        grid-column: 3;
     }
 
     form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-anchor-column-heading {
-        grid-column: 2;
+        grid-column: 3;
         justify-content: start;
     }
 
     form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-subquestion-row > .felement {
-        grid-column: 2;
+        grid-column: 3;
     }
 
     form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-subquestion-row fieldset > .d-flex {
@@ -486,7 +474,7 @@ form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-anchor-grid .qtype-clo
     margin-top: 1rem;
 }
 
-.que.clozeonimage .qtype-clozeonimage-subquestion .qtype-clozeonimage-feedback-region {
+.que.clozeonimage .qtype-clozeonimage-region .qtype-clozeonimage-feedback-region {
     display: inline-block;
     position: relative;
 }
@@ -515,27 +503,27 @@ form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-anchor-grid .qtype-clo
     display: none;
 }
 
-.que.clozeonimage .qtype-clozeonimage-subquestion
+.que.clozeonimage .qtype-clozeonimage-region
 .qtype-clozeonimage-feedback-region:not(.subquestion) {
     border-radius: var(--bs-border-radius);
 }
 
-.que.clozeonimage .qtype-clozeonimage-subquestion
+.que.clozeonimage .qtype-clozeonimage-region
 .qtype-clozeonimage-feedback-region.qtype-clozeonimage-state-correct {
     --qtype-clozeonimage-state-outline: var(--qtype-clozeonimage-correct-border);
 }
 
-.que.clozeonimage .qtype-clozeonimage-subquestion
+.que.clozeonimage .qtype-clozeonimage-region
 .qtype-clozeonimage-feedback-region.qtype-clozeonimage-state-incorrect {
     --qtype-clozeonimage-state-outline: var(--qtype-clozeonimage-incorrect-border);
 }
 
-.que.clozeonimage .qtype-clozeonimage-subquestion
+.que.clozeonimage .qtype-clozeonimage-region
 .qtype-clozeonimage-feedback-region.qtype-clozeonimage-state-partiallycorrect {
     --qtype-clozeonimage-state-outline: var(--qtype-clozeonimage-partial-border);
 }
 
-.que.clozeonimage .qtype-clozeonimage-subquestion
+.que.clozeonimage .qtype-clozeonimage-region
 .qtype-clozeonimage-feedback-region:is(
     .qtype-clozeonimage-state-correct,
     .qtype-clozeonimage-state-incorrect,
@@ -544,37 +532,37 @@ form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-anchor-grid .qtype-clo
     border-color: transparent;
 }
 
-.que.clozeonimage .qtype-clozeonimage-subquestion
+.que.clozeonimage .qtype-clozeonimage-region
 .qtype-clozeonimage-feedback-region:not(.subquestion).qtype-clozeonimage-state-correct,
-.que.clozeonimage .qtype-clozeonimage-subquestion
+.que.clozeonimage .qtype-clozeonimage-region
 .qtype-clozeonimage-feedback-region.subquestion.qtype-clozeonimage-state-correct > .form-control,
-.que.clozeonimage .qtype-clozeonimage-subquestion
+.que.clozeonimage .qtype-clozeonimage-region
 .qtype-clozeonimage-feedback-region.subquestion.qtype-clozeonimage-state-correct > .form-select {
     outline: 4px solid var(--qtype-clozeonimage-state-outline);
     outline-offset: 1px;
 }
 
-.que.clozeonimage .qtype-clozeonimage-subquestion
+.que.clozeonimage .qtype-clozeonimage-region
 .qtype-clozeonimage-feedback-region:not(.subquestion).qtype-clozeonimage-state-incorrect,
-.que.clozeonimage .qtype-clozeonimage-subquestion
+.que.clozeonimage .qtype-clozeonimage-region
 .qtype-clozeonimage-feedback-region.subquestion.qtype-clozeonimage-state-incorrect > .form-control,
-.que.clozeonimage .qtype-clozeonimage-subquestion
+.que.clozeonimage .qtype-clozeonimage-region
 .qtype-clozeonimage-feedback-region.subquestion.qtype-clozeonimage-state-incorrect > .form-select {
     outline: 4px solid var(--qtype-clozeonimage-state-outline);
     outline-offset: 1px;
 }
 
-.que.clozeonimage .qtype-clozeonimage-subquestion
+.que.clozeonimage .qtype-clozeonimage-region
 .qtype-clozeonimage-feedback-region:not(.subquestion).qtype-clozeonimage-state-partiallycorrect,
-.que.clozeonimage .qtype-clozeonimage-subquestion
+.que.clozeonimage .qtype-clozeonimage-region
 .qtype-clozeonimage-feedback-region.subquestion.qtype-clozeonimage-state-partiallycorrect > .form-control,
-.que.clozeonimage .qtype-clozeonimage-subquestion
+.que.clozeonimage .qtype-clozeonimage-region
 .qtype-clozeonimage-feedback-region.subquestion.qtype-clozeonimage-state-partiallycorrect > .form-select {
     outline: 4px solid var(--qtype-clozeonimage-state-outline);
     outline-offset: 1px;
 }
 
-.que.clozeonimage .qtype-clozeonimage-subquestion
+.que.clozeonimage .qtype-clozeonimage-region
 .qtype-clozeonimage-feedback-region:not(:is(
     .qtype-clozeonimage-state-correct,
     .qtype-clozeonimage-state-incorrect,
@@ -586,36 +574,34 @@ form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-anchor-grid .qtype-clo
     outline: 0;
 }
 
-.que.clozeonimage .qtype-clozeonimage-subquestion
+.que.clozeonimage .qtype-clozeonimage-region
 .qtype-clozeonimage-feedback-region > .form-control.correct,
-.que.clozeonimage .qtype-clozeonimage-subquestion
-.qtype-clozeonimage-feedback-region > .form-select.correct,
-.que.clozeonimage .qtype-clozeonimage-subquestion .qtype-clozeonimage-choice.correct::before {
+.que.clozeonimage .qtype-clozeonimage-region
+.qtype-clozeonimage-feedback-region > .form-select.correct {
     background-color: var(--qtype-clozeonimage-correct-bg);
 }
 
-.que.clozeonimage .qtype-clozeonimage-subquestion
+.que.clozeonimage .qtype-clozeonimage-region
 .qtype-clozeonimage-feedback-region > .form-control.incorrect,
-.que.clozeonimage .qtype-clozeonimage-subquestion
-.qtype-clozeonimage-feedback-region > .form-select.incorrect,
-.que.clozeonimage .qtype-clozeonimage-subquestion .qtype-clozeonimage-choice.incorrect::before {
+.que.clozeonimage .qtype-clozeonimage-region
+.qtype-clozeonimage-feedback-region > .form-select.incorrect {
     background-color: var(--qtype-clozeonimage-incorrect-bg);
 }
 
-.que.clozeonimage .qtype-clozeonimage-subquestion
+.que.clozeonimage .qtype-clozeonimage-region
 .qtype-clozeonimage-feedback-region > .form-control.partiallycorrect,
-.que.clozeonimage .qtype-clozeonimage-subquestion
-.qtype-clozeonimage-feedback-region > .form-select.partiallycorrect,
-.que.clozeonimage .qtype-clozeonimage-subquestion .qtype-clozeonimage-choice.partiallycorrect::before {
+.que.clozeonimage .qtype-clozeonimage-region
+.qtype-clozeonimage-feedback-region > .form-select.partiallycorrect {
     background-color: var(--qtype-clozeonimage-partial-bg);
 }
 
-.que.clozeonimage .qtype-clozeonimage-subquestion .qtype-clozeonimage-choice {
+.que.clozeonimage .qtype-clozeonimage-region .qtype-clozeonimage-choice {
     isolation: isolate;
     position: relative;
 }
 
-.que.clozeonimage .qtype-clozeonimage-subquestion .qtype-clozeonimage-choice::before {
+.que.clozeonimage .qtype-clozeonimage-region .qtype-clozeonimage-choice::before {
+    background-color: transparent;
     border-radius: var(--bs-border-radius-sm);
     content: "";
     inset: 0;
@@ -624,34 +610,39 @@ form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-anchor-grid .qtype-clo
     z-index: 0;
 }
 
-.que.clozeonimage .qtype-clozeonimage-subquestion
+.que.clozeonimage .qtype-clozeonimage-region
 .qtype-clozeonimage-choice > .qtype-clozeonimage-choice-control {
     position: relative;
     z-index: 1;
 }
 
-.que.clozeonimage .qtype-clozeonimage-subquestion .form-select option {
+.que.clozeonimage .qtype-clozeonimage-region .form-select option {
     background-color: var(--qtype-clozeonimage-neutral-option-bg);
     color: var(--bs-body-color);
 }
 
-.que.clozeonimage .qtype-clozeonimage-subquestion .form-select.correct option:checked {
+.que.clozeonimage .qtype-clozeonimage-region .form-select.correct option:checked {
     background-color: var(--qtype-clozeonimage-correct-bg);
 }
 
-.que.clozeonimage .qtype-clozeonimage-subquestion .form-select.incorrect option:checked {
+.que.clozeonimage .qtype-clozeonimage-region .form-select.incorrect option:checked {
     background-color: var(--qtype-clozeonimage-incorrect-bg);
 }
 
-.que.clozeonimage .qtype-clozeonimage-subquestion .form-select.partiallycorrect option:checked {
+.que.clozeonimage .qtype-clozeonimage-region .form-select.partiallycorrect option:checked {
     background-color: var(--qtype-clozeonimage-partial-bg);
 }
 
-.que.clozeonimage .qtype-clozeonimage-subquestion .qtype-clozeonimage-review-surface {
+/* Review text fields and choice overlays pin feedback on click; editable fields keep native cursors. */
+.que.clozeonimage .qtype-clozeonimage-region input.form-control[readonly].qtype-clozeonimage-feedback-trigger,
+.que.clozeonimage .qtype-clozeonimage-region .qtype-clozeonimage-review-surface {
+    cursor: pointer;
+}
+
+.que.clozeonimage .qtype-clozeonimage-region .qtype-clozeonimage-review-surface {
     appearance: none;
     background-color: transparent;
     border: 0;
-    cursor: pointer;
     inset: 0;
     margin: 0;
     padding: 0;
@@ -660,7 +651,7 @@ form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-anchor-grid .qtype-clo
 }
 
 /* Only non-editable review controls get the dark inset focus; editable controls keep native styling. */
-.que.clozeonimage .qtype-clozeonimage-subquestion :is(
+.que.clozeonimage .qtype-clozeonimage-region :is(
 input.form-control[readonly],
 .qtype-clozeonimage-review-surface
 ):focus-visible {
@@ -669,12 +660,12 @@ input.form-control[readonly],
 }
 
 /* Replace the review button's native outline, leaving readonly inputs' semantic outlines intact. */
-.que.clozeonimage .qtype-clozeonimage-subquestion .qtype-clozeonimage-review-surface:focus-visible {
+.que.clozeonimage .qtype-clozeonimage-region .qtype-clozeonimage-review-surface:focus-visible {
     outline: 0;
 }
 
 /* Exclude the dropdown's Bootstrap mb-1 margin from its keyboard-focused semantic review surface. */
-.que.clozeonimage .qtype-clozeonimage-subquestion
+.que.clozeonimage .qtype-clozeonimage-region
 .qtype-clozeonimage-feedback-region.subquestion:is(
     .qtype-clozeonimage-state-correct,
     .qtype-clozeonimage-state-incorrect,
@@ -683,9 +674,10 @@ input.form-control[readonly],
     bottom: .25rem;
 }
 
+.popover.qtype-clozeonimage-appearance-transparent,
 .popover.qtype-clozeonimage-appearance-translucent,
 .popover.qtype-clozeonimage-appearance-opaque {
-    --qtype-clozeonimage-popover-bg: rgba(247, 247, 247, 0.94);
+    --qtype-clozeonimage-popover-bg: #fff;
     --qtype-clozeonimage-popover-border: #666;
     --bs-popover-bg: var(--qtype-clozeonimage-popover-bg);
     --bs-popover-border-color: var(--qtype-clozeonimage-popover-border);
@@ -714,4 +706,489 @@ input.form-control[readonly],
 
 .popover .qtype-clozeonimage-feedback-state {
     font-weight: 600;
+}
+
+/* Width includes padding and border. Do not clip controls, outlines or feedback. */
+.qtype-clozeonimage-block {
+    box-sizing: border-box;
+    padding: 12px;
+    border: 1px solid var(--qtype-clozeonimage-block-border, transparent);
+    border-radius: 8px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    height: auto;
+}
+
+/* Strip only the outer spacing; the answer controls keep their internal spacing. */
+.qtype-clozeonimage-block.qtype-clozeonimage-block-auto {
+    width: max-content;
+    padding: 0;
+    display: flex;
+    align-items: flex-start;
+}
+
+.qtype-clozeonimage-block-auto .nolink,
+.qtype-clozeonimage-block-auto .qtype-clozeonimage-preview-control {
+    display: flex;
+    align-items: flex-start;
+}
+
+.que.clozeonimage .qtype-clozeonimage-block-auto .qtype-clozeonimage-feedback-region {
+    display: flex;
+    align-items: flex-start;
+}
+
+.qtype-clozeonimage-block-auto :is(.form-control, .form-select, .answer) {
+    margin: 0 !important; /* stylelint-disable-line declaration-no-important */
+}
+
+.qtype-clozeonimage-block-auto .qtype-clozeonimage-resize {
+    display: none;
+}
+
+.que.clozeonimage .qtype-clozeonimage-block
+.qtype-clozeonimage-feedback-region.subquestion:is(
+    .qtype-clozeonimage-state-correct,
+    .qtype-clozeonimage-state-incorrect,
+    .qtype-clozeonimage-state-partiallycorrect
+) > select.form-select.mb-1:disabled + .qtype-clozeonimage-review-surface:focus-visible {
+    bottom: 0;
+}
+
+.qtype-clozeonimage-blockwidth[aria-disabled="true"] {
+    background-color: var(--bs-secondary-bg, #e9ecef);
+    color: var(--bs-secondary-color, #6c757d);
+    cursor: not-allowed;
+}
+
+.qtype-clozeonimage-block > :last-child,
+.qtype-clozeonimage-block > p:last-of-type {
+    margin-bottom: 0;
+}
+
+.qtype-clozeonimage-preview-subquestion.qtype-clozeonimage-block {
+    outline: 1px dashed var(--bs-primary, #0f6cbf);
+    min-height: 1.5em;
+}
+
+#qtype-clozeonimage-preview-composition .qtype-clozeonimage-resize {
+    position: absolute;
+    right: -5px;
+    top: 0;
+    width: 10px;
+    height: 100%;
+    min-height: 20px;
+    cursor: ew-resize;
+    border-right: 3px solid var(--bs-primary, #0f6cbf);
+}
+
+#qtype-clozeonimage-preview-composition .qtype-clozeonimage-image-resize {
+    position: absolute;
+    top: 0;
+    width: 10px;
+    transform: translateX(-50%);
+    cursor: ew-resize;
+    touch-action: none;
+    /* Keep the image grip accessible where a block overlaps the edge, only in the editor. */
+    z-index: 1;
+}
+
+#qtype-clozeonimage-preview-composition .qtype-clozeonimage-image-resize::before {
+    content: "";
+    position: absolute;
+    left: 4px;
+    height: 100%;
+    border-left: 3px solid var(--bs-primary, #0f6cbf);
+    pointer-events: none;
+}
+
+form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-blockwidth {
+    min-width: 0;
+    width: 100%;
+}
+
+/* Give each standard rich editor the full available row width, including its toolbar. */
+form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-subquestion-row .qtype-clozeonimage-source {
+    grid-column: 1 / -1;
+    min-width: 0;
+    width: 100%;
+    margin-top: .5rem;
+}
+
+@media (max-width: 575.98px) {
+    form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-width-heading {
+        grid-column: 2;
+    }
+
+    form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-anchor-area {
+        grid-row: auto;
+    }
+}
+
+form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-select-block {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: start;
+    margin-top: .75rem;
+}
+
+/* Match Boost's question paragraph rhythm in the author positioning preview. */
+.qtype-clozeonimage-preview-subquestion p {
+    margin-bottom: .5em;
+}
+
+/* Every response is an atomic inline box: wrap between responses, never compress them. */
+.qtype-clozeonimage-preview-control.qtype-clozeonimage-control,
+.que.clozeonimage .qtype-clozeonimage-region .qtype-clozeonimage-control {
+    display: inline-flex;
+    vertical-align: middle;
+    width: max-content;
+    min-width: max-content;
+    max-width: none;
+    overflow: visible;
+    overflow-wrap: normal;
+}
+
+.qtype-clozeonimage-control > .form-control,
+.qtype-clozeonimage-control > .form-select {
+    width: auto;
+    max-width: none;
+}
+
+/* Native text inputs inherit authored typography; unformatted colour keeps the theme's input default. */
+.qtype-clozeonimage-preview-subquestion .qtype-clozeonimage-control > input.form-control[type="text"],
+.que.clozeonimage .qtype-clozeonimage-region .qtype-clozeonimage-control > input.form-control[type="text"] {
+    font: inherit;
+}
+
+.qtype-clozeonimage-preview-subquestion .qtype-clozeonimage-authored-color
+.qtype-clozeonimage-control > input.form-control[type="text"],
+.que.clozeonimage .qtype-clozeonimage-region .qtype-clozeonimage-authored-color
+.qtype-clozeonimage-control > input.form-control[type="text"] {
+    color: inherit;
+}
+
+/* Keep font/colour inheritance through Tiny wrappers, while ignoring their outer spacing. */
+.qtype-clozeonimage-block-auto .qtype-clozeonimage-auto-wrapper {
+    display: contents;
+}
+
+.qtype-clozeonimage-control > .qtype-clozeonimage-choices {
+    display: inline-flex;
+    width: max-content;
+    flex-wrap: nowrap;
+    vertical-align: top;
+    margin: 0;
+}
+
+.qtype-clozeonimage-choices-vertical {
+    flex-direction: column;
+}
+
+.qtype-clozeonimage-choices > .form-check {
+    flex-shrink: 0;
+}
+
+/* Remove control-only Bootstrap spacing, without removing authored paragraph breaks. */
+.qtype-clozeonimage-block .qtype-clozeonimage-control,
+.que.clozeonimage .qtype-clozeonimage-block .qtype-clozeonimage-control {
+    vertical-align: top;
+}
+
+.qtype-clozeonimage-block .qtype-clozeonimage-control > :is(.form-control, .form-select) {
+    margin: 0 !important; /* stylelint-disable-line declaration-no-important */
+}
+
+/* A compact visual cue only: the original full-height hit areas and resize cursors stay active. */
+#qtype-clozeonimage-preview-composition .qtype-clozeonimage-resize::after,
+#qtype-clozeonimage-preview-composition .qtype-clozeonimage-image-resize::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: calc(100% + 1.5px);
+    width: 16px;
+    height: 16px;
+    transform: translate(-50%, -50%);
+    background: url("[[pix:qtype_clozeonimage|resize-horizontal]]") center / 16px 16px no-repeat;
+    pointer-events: none;
+}
+
+#qtype-clozeonimage-preview-composition .qtype-clozeonimage-image-resize::after {
+    left: 5.5px;
+}
+
+#qtype-clozeonimage-preview-composition .qtype-clozeonimage-resize:hover::after,
+#qtype-clozeonimage-preview-composition .qtype-clozeonimage-preview-resizing .qtype-clozeonimage-resize::after,
+#qtype-clozeonimage-preview-composition .qtype-clozeonimage-preview-resizing .qtype-clozeonimage-image-resize::after,
+#qtype-clozeonimage-preview-composition .qtype-clozeonimage-image-resize:hover::after {
+    visibility: hidden;
+}
+
+/* Isolated text measurement; never contributes to composition geometry or accessible content. */
+.qtype-clozeonimage-field-measure {
+    position: fixed;
+    left: 0;
+    top: 0;
+    visibility: hidden;
+    white-space: pre;
+    width: max-content;
+    pointer-events: none;
+}
+
+/* The enhanced picker keeps Moodle's original button, file link and maximum-size description. */
+.qtype-clozeonimage-background-picker .qtype-clozeonimage-background-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.qtype-clozeonimage-background-picker .filepicker-filelist {
+    min-height: 0;
+    border: 0;
+    overflow-wrap: anywhere;
+}
+
+.qtype-clozeonimage-background-picker .filepicker-filelist:has(.qtype-clozeonimage-current-image-label) {
+    margin-top: 0.5rem;
+}
+
+.qtype-clozeonimage-background-picker .filepicker-filelist .filepicker-container {
+    position: static;
+    border: 0;
+    padding: 0;
+    text-align: start;
+}
+
+/* Autonomous surface: the coordinate container itself never supplies an image origin. */
+.qtype-clozeonimage-surface {
+    /* Positive rendering ranks keep every element above this background. */
+    z-index: 0;
+    pointer-events: auto;
+}
+.qtype-clozeonimage-composition[data-composition],
+.qtype-clozeonimage-preview-composition[data-composition] {
+    isolation: isolate;
+}
+.qtype-clozeonimage-scene-image,
+.qtype-clozeonimage-preview-scene-image {
+    position: absolute;
+    max-width: none;
+}
+.qtype-clozeonimage-preview-scene-image {
+    cursor: grab;
+    touch-action: none;
+}
+.qtype-clozeonimage-preview-scene-image > img {
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    pointer-events: none;
+    user-select: none;
+}
+.qtype-clozeonimage-preview-scene-image > .qtype-clozeonimage-image-resize {
+    left: 100%;
+    top: 0;
+    height: 100%;
+}
+.qtype-clozeonimage-composition-resize {
+    padding: 0;
+    background: transparent;
+    border: 0;
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    border-right: 3px solid var(--bs-primary, #0f6cbf);
+    border-bottom: 3px solid var(--bs-primary, #0f6cbf);
+    cursor: nwse-resize;
+    z-index: 100001;
+    touch-action: none;
+}
+.qtype-clozeonimage-resizing *,
+.qtype-clozeonimage-resizing {
+    cursor: ew-resize !important; /* stylelint-disable-line declaration-no-important */
+}
+.qtype-clozeonimage-moving *,
+.qtype-clozeonimage-moving {
+    cursor: grabbing !important; /* stylelint-disable-line declaration-no-important */
+}
+.qtype-clozeonimage-composition-resizing *,
+.qtype-clozeonimage-composition-resizing {
+    cursor: nwse-resize !important; /* stylelint-disable-line declaration-no-important */
+}
+.qtype-clozeonimage-resizing .qtype-clozeonimage-image-resize::after,
+.qtype-clozeonimage-resizing .qtype-clozeonimage-resize::after {
+    visibility: hidden;
+}
+.qtype-clozeonimage-subquestion-row .qtype-clozeonimage-association {
+    grid-column: 2 / span 3;
+}
+.qtype-clozeonimage-subquestion-row .qtype-clozeonimage-layer {
+    width: 6rem;
+}
+
+/* Compact, labelled authoring properties; the precise geometry remains in hidden fields. */
+form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-color input {
+    border-radius: 0;
+    width: 40px;
+    height: 30px;
+    padding: 0;
+    cursor: pointer;
+}
+
+form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-color input:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+}
+
+form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-pixel {
+    width: calc(6ch + 3rem);
+    min-width: 0;
+}
+
+form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-layer {
+    width: calc(5ch + 3rem);
+    min-width: 0;
+}
+
+form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-property {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    flex-wrap: nowrap;
+    margin: .25rem .75rem .25rem 0;
+}
+
+form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-property label {
+    white-space: nowrap;
+    margin: 0;
+}
+
+form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-dimension-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem;
+    width: 100%;
+}
+
+form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-image-delete {
+    margin-left: 1rem;
+}
+
+form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-column-headings {
+    display: block;
+}
+
+form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-column-headings input {
+    width: 1.25rem;
+    height: 1.25rem;
+}
+
+form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-subquestion-row {
+    grid-template-columns: 1.25rem 8rem minmax(0, 1fr);
+    gap: .5rem;
+}
+
+form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-subquestion-row fieldset > .d-flex {
+    display: flex !important; /* stylelint-disable-line declaration-no-important */
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem;
+}
+
+form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-subquestion-row .qtype-clozeonimage-source {
+    flex: 0 0 100%;
+    order: -1;
+}
+
+form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-block-association-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem;
+    width: 100%;
+}
+
+@media (max-width: 575.98px) {
+    form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-subquestion-row > .felement {
+        grid-column: 1 / -1;
+    }
+}
+
+@media (max-width: 575.98px) {
+    /* Leave room to edit below Tiny's wrapped toolbar without replacing its instance. */
+    form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-source .tox-tinymce {
+        min-height: 18rem;
+    }
+}
+
+form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-anchor-area {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    width: auto;
+}
+form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-block-association-line {
+    margin-bottom: 6px;
+}
+.qtype-clozeonimage-composition-resize-top-left {
+    transform: translate(-100%, -100%);
+    border: 0;
+    border-left: 3px solid var(--bs-primary, #0f6cbf);
+    border-top: 3px solid var(--bs-primary, #0f6cbf);
+}
+.qtype-clozeonimage-composition-resize:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+}
+
+/* Outrank the theme's button:not(:disabled) pointer rule, without changing other handles. */
+form.mform[data-qtype="clozeonimage"] button.qtype-clozeonimage-composition-resize:not(:disabled) {
+    cursor: nwse-resize;
+}
+/* Match the standard checkbox's half-rem label spacing for grouped Moodle checkboxes. */
+form.mform[data-qtype="clozeonimage"] label.form-check-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: .5rem;
+}
+form.mform[data-qtype="clozeonimage"] label.form-check-inline > input[type="checkbox"] {
+    margin: 0;
+    float: none;
+}
+form.mform[data-qtype="clozeonimage"] label.qtype-clozeonimage-image-delete:has(input:checked) {
+    color: var(--bs-danger, var(--danger));
+}
+
+/* Keep the left-hand label/help and the standard checkbox on the same vertical centre. */
+form.mform[data-qtype="clozeonimage"] #fgroup_id_showcompositiongroup {
+    align-items: center;
+}
+form.mform[data-qtype="clozeonimage"] #fgroup_id_showcompositiongroup label {
+    margin-bottom: 0;
+}
+form.mform[data-qtype="clozeonimage"] #fgroup_id_showcompositiongroup > .col-form-label {
+    padding-top: 0;
+}
+
+/* Keep the independent sticky controls together when the property line wraps. */
+form.mform[data-qtype="clozeonimage"] .qtype-clozeonimage-sticky-options {
+    display: inline-flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: .5rem;
+}
+
+.qtype-clozeonimage-sticky-content {
+    display: flow-root;
+    flex: 0 0 auto;
+}
+
+form.mform[data-qtype="clozeonimage"] #fgroup_id_blockmaintenance .felement,
+form.mform[data-qtype="clozeonimage"] #fgroup_id_blockactions .felement {
+    flex-wrap: wrap;
+    gap: .5rem;
 }

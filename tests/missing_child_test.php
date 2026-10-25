@@ -173,7 +173,7 @@ final class missing_child_test extends \qbehaviour_walkthrough_test_base {
     private function get_row_value(\MoodleQuickForm $form, int $index, string $name): mixed {
         foreach ($form->getElement('subquestionrow[' . $index . ']')->getElements() as $element) {
             if ($element->getName() === $name . '[' . $index . ']') {
-                return $element->getValue();
+                return $name === 'subquestion' ? \qtype_clozeonimage::source_text($element->getValue()) : $element->getValue();
             }
         }
         $this->fail('Could not find repeated element ' . $name . '[' . $index . '].');
@@ -194,7 +194,7 @@ final class missing_child_test extends \qbehaviour_walkthrough_test_base {
             'name' => $question->name,
             'questiontext' => $questiontext,
             'generalfeedback' => $generalfeedback,
-            'bgimage' => $question->bgimage,
+            'sceneimage' => $question->sceneimage ?? [],
             'displaywidth' => 1,
             'subquestion' => $sources,
         ];
@@ -387,15 +387,12 @@ final class missing_child_test extends \qbehaviour_walkthrough_test_base {
         [$form, $formquestion] = $this->make_edit_form($questiondata);
         $quickform = $this->get_quickform($form);
 
-        $this->assertSame('', $this->get_row_value($quickform, 3, 'subquestion'));
+        $this->assertSame(self::SOURCES[3], $this->get_row_value($quickform, 3, 'subquestion'));
         $this->assertSame(self::SOURCES[6], $this->get_row_value($quickform, 6, 'subquestion'));
         $this->assertSame(self::XLEFT[1], (int) $this->get_row_value($quickform, 3, 'xleft'));
         $this->assertSame(self::YTOP[1], (int) $this->get_row_value($quickform, 3, 'ytop'));
         $this->assertSame(4, (int) $formquestion->anchor[3]);
-        $this->assertStringContainsString(
-            get_string('missingsubquestionedit', 'qtype_clozeonimage'),
-            $quickform->getElementError('subquestionrow[3]')
-        );
+        $this->assertEmpty($quickform->getElementError('subquestionrow[3]'));
 
         $sources = [0 => self::SOURCES[0], 3 => '', 6 => self::SOURCES[6]];
         $errors = $form->validation($this->make_validation_data($formquestion, $sources), []);

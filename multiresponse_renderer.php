@@ -134,7 +134,7 @@ class qtype_clozeonimage_multiresponse_renderer extends qtype_multianswer_subq_r
             }
         }
         $result = html_writer::span($grouplabel, 'visually-hidden', ['id' => $grouplabelid]);
-        $result .= $this->choices_wrapper_start($horizontal);
+        $result .= \qtype_clozeonimage\local\choice_layout::start($horizontal);
         foreach ($order as $value => $ansid) {
             $answer = $subq->answers[$ansid];
             $inputattributes['name'] = $basename . $value;
@@ -166,7 +166,7 @@ class qtype_clozeonimage_multiresponse_renderer extends qtype_multianswer_subq_r
                 $class .= ' form-check-inline';
             }
 
-            $result .= $this->choice_wrapper_start($class, $horizontal);
+            $result .= html_writer::start_tag('span', ['class' => $class]);
             $control = html_writer::empty_tag('input', $inputattributes);
             $choicelabel = $subq->format_text(
                 $answer->answer,
@@ -185,14 +185,14 @@ class qtype_clozeonimage_multiresponse_renderer extends qtype_multianswer_subq_r
                 ['for' => $inputattributes['id'], 'class' => 'form-check-label text-body']
             );
             $result .= html_writer::span($control, 'qtype-clozeonimage-choice-control');
-            $result .= $this->choice_wrapper_end($horizontal);
+            $result .= html_writer::end_tag('span');
         }
-        $result .= $this->choices_wrapper_end($horizontal);
+        $result .= html_writer::end_tag('span');
         if ($options->readonly) {
             $result .= $this->feedback_surface_button($feedbackpopup, (int) $index, $statustext);
         }
 
-        $regionclass = 'qtype-clozeonimage-feedback-region';
+        $regionclass = 'qtype-clozeonimage-feedback-region qtype-clozeonimage-control';
         if ($stateclass !== '') {
             $regionclass .= ' qtype-clozeonimage-state-' . $stateclass;
         }
@@ -204,54 +204,7 @@ class qtype_clozeonimage_multiresponse_renderer extends qtype_multianswer_subq_r
         if (!$options->readonly) {
             $regionattributes = $this->feedback_trigger_attributes($regionattributes, $feedbackpopup);
         }
-        return html_writer::div($result, '', $regionattributes);
+        return html_writer::tag('span', $result, $regionattributes);
     }
 
-    /**
-     * Start the wrapper containing all Multiple Response choices.
-     *
-     * @param bool $horizontal Whether choices use the horizontal table layout.
-     * @return string Opening wrapper markup.
-     */
-    private function choices_wrapper_start(bool $horizontal): string {
-        if ($horizontal) {
-            return html_writer::start_tag('table', ['class' => 'answer']) .
-                html_writer::start_tag('tbody') . html_writer::start_tag('tr');
-        }
-        return html_writer::start_tag('div', ['class' => 'answer']);
-    }
-
-    /**
-     * End the wrapper containing all Multiple Response choices.
-     *
-     * @param bool $horizontal Whether choices use the horizontal table layout.
-     * @return string Closing wrapper markup.
-     */
-    private function choices_wrapper_end(bool $horizontal): string {
-        if ($horizontal) {
-            return html_writer::end_tag('tr') . html_writer::end_tag('tbody') . html_writer::end_tag('table');
-        }
-        return html_writer::end_tag('div');
-    }
-
-    /**
-     * Start one Multiple Response choice wrapper.
-     *
-     * @param string $class Choice wrapper classes.
-     * @param bool $horizontal Whether choices use the horizontal table layout.
-     * @return string Opening choice wrapper.
-     */
-    private function choice_wrapper_start(string $class, bool $horizontal): string {
-        return html_writer::start_tag($horizontal ? 'td' : 'div', ['class' => $class]);
-    }
-
-    /**
-     * End one Multiple Response choice wrapper.
-     *
-     * @param bool $horizontal Whether choices use the horizontal table layout.
-     * @return string Closing choice wrapper.
-     */
-    private function choice_wrapper_end(bool $horizontal): string {
-        return html_writer::end_tag($horizontal ? 'td' : 'div');
-    }
 }

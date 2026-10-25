@@ -108,10 +108,12 @@ class qtype_clozeonimage_multichoice_renderer extends qtype_multianswer_subq_ren
 
         $legend = $this->get_answer_label('multichoicex', 'qtype_multianswer');
         $legend .= $this->result_state_text($statustext);
-        $result = $this->choices_wrapper_start($legend);
+        $grouplabelid = $inputname . '-label';
+        $groupid = $inputname . '-group';
+        $result = $this->choices_wrapper_start($legend, $horizontal, $grouplabelid, $groupid);
         if (!$options->readonly) {
             $clearid = $inputname . '-clear';
-            $clearlabel = get_string('clearchoiceforsubquestion', 'qtype_clozeonimage', $index);
+            $clearlabel = get_string('clearmychoice', 'qtype_clozeonimage');
             // Keep the unanswered value out of the native radio group and its keyboard navigation.
             // Place it before the choices so a visible answer also wins in a non-JavaScript POST.
             $clearattributes = [
@@ -145,7 +147,7 @@ class qtype_clozeonimage_multichoice_renderer extends qtype_multianswer_subq_ren
                 $class .= ' form-check-inline';
             }
 
-            $result .= html_writer::start_tag('div', ['class' => $class]);
+            $result .= html_writer::start_tag('span', ['class' => $class]);
             $control = html_writer::empty_tag('input', $inputattributes);
             $choicelabel = $subq->format_text(
                 $answer->answer,
@@ -166,7 +168,7 @@ class qtype_clozeonimage_multichoice_renderer extends qtype_multianswer_subq_ren
                 ['for' => $inputattributes['id'], 'class' => 'form-check-label text-body']
             );
             $result .= html_writer::span($control, 'qtype-clozeonimage-choice-control');
-            $result .= html_writer::end_tag('div');
+            $result .= html_writer::end_tag('span');
         }
         $result .= $this->choices_wrapper_end();
         if ($options->readonly) {
@@ -177,18 +179,26 @@ class qtype_clozeonimage_multichoice_renderer extends qtype_multianswer_subq_ren
                 'class' => 'qtype-clozeonimage-clear-choice',
                 'data-action' => 'clozeonimage-clear-choice',
                 'title' => $clearlabel,
+                // The button sits outside the radiogroup: reuse its announced name, not a technical slot number.
+                'aria-labelledby' => $inputname . '-clear-label ' . $grouplabelid,
+                'aria-controls' => $groupid,
                 'hidden' => 'hidden',
             ];
             $result .= html_writer::tag(
                 'button',
-                html_writer::span('C', '', ['aria-hidden' => 'true']) .
-                    html_writer::span($clearlabel, 'visually-hidden'),
+                html_writer::tag('svg', html_writer::tag('path', '', [
+                    'd' => 'M9 5H20a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H9L2 12 9 5Zm1.6666666666666667 4 6 6m0-6-6 6',
+                    'fill' => 'none', 'stroke' => 'currentColor',
+                    'stroke-width' => '2.5', 'stroke-linecap' => 'round', 'stroke-linejoin' => 'round',
+                ]), ['xmlns' => 'http://www.w3.org/2000/svg', 'viewBox' => '0 0 24 24',
+                    'width' => 18, 'height' => 18, 'aria-hidden' => 'true', 'focusable' => 'false']) .
+                    html_writer::span($clearlabel, 'visually-hidden', ['id' => $inputname . '-clear-label']),
                 $buttonattributes
             );
             $this->page->requires->js_call_amd('qtype_clozeonimage/clearchoice', 'init');
         }
 
-        $regionclass = 'qtype-clozeonimage-feedback-region';
+        $regionclass = 'qtype-clozeonimage-feedback-region qtype-clozeonimage-control';
         if ($stateclass !== '') {
             $regionclass .= ' qtype-clozeonimage-state-' . $stateclass;
         }
@@ -199,29 +209,18 @@ class qtype_clozeonimage_multichoice_renderer extends qtype_multianswer_subq_ren
         if (!$options->readonly) {
             $regionattributes = $this->feedback_trigger_attributes($regionattributes, $feedbackpopup);
         }
-        return html_writer::div($result, '', $regionattributes);
+        return html_writer::tag('span', $result, $regionattributes);
     }
 
-    /**
-     * Start the fieldset containing all Multichoice options.
-     *
-     * @param string $legend Accessible legend text.
-     * @return string Opening fieldset and accessible legend.
-     */
-    private function choices_wrapper_start(string $legend): string {
-        return html_writer::start_tag('fieldset', ['class' => 'answer']) . html_writer::tag(
-            'legend',
-            $legend,
-            ['class' => 'visually-hidden']
-        );
+    /** Start a labelled panel without placing block elements inside an author paragraph. */
+    private function choices_wrapper_start(string $legend, bool $horizontal, string $labelid, string $groupid): string {
+        return \qtype_clozeonimage\local\choice_layout::start($horizontal, [
+            'role' => 'radiogroup', 'aria-labelledby' => $labelid, 'id' => $groupid,
+        ]) . html_writer::span($legend, 'visually-hidden', ['id' => $labelid]);
     }
 
-    /**
-     * End the fieldset containing all Multichoice options.
-     *
-     * @return string Closing fieldset tag.
-     */
+    /** End the choice panel. */
     private function choices_wrapper_end(): string {
-        return html_writer::end_tag('fieldset');
+        return html_writer::end_tag('span');
     }
 }

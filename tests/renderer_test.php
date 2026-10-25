@@ -36,6 +36,33 @@ require_once($CFG->dirroot . '/question/type/clozeonimage/questiontype.php');
 #[\PHPUnit\Framework\Attributes\CoversClass(\qtype_clozeonimage_multichoice_renderer::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(\qtype_clozeonimage_multiresponse_renderer::class)]
 final class renderer_test extends \qbehaviour_walkthrough_test_base {
+    /** The decorative cue must not alter the translated error or its field association. */
+    public function test_numerical_validation_arrow_is_decorative(): void {
+        $question = $this->make_question(\qtype_clozeonimage::CONTROL_APPEARANCE_TRANSLUCENT, 'numerical');
+        $this->start_attempt_at_question($question, 'immediatefeedback', 1);
+        $this->process_submission(['sub1_answer' => 'not-a-number', '-submit' => 1]);
+        $this->check_current_state(\question_state::$invalid);
+        $this->render();
+        $xpath = $this->xpath($this->currentoutput);
+        $field = $xpath->query('//input[@type="text"]')->item(0);
+        $this->assertSame('true', $field->getAttribute('aria-invalid'));
+        $id = $field->getAttribute('id');
+        $this->assertContains($id . '-error', explode(' ', $field->getAttribute('aria-describedby')));
+        $message = $xpath->query('//span[@id="' . $id . '-error"]')->item(0);
+        $this->assertSame($field->parentNode, $message->parentNode, 'The message is positioned relative to its own control');
+        $this->assertSame($id, $message->getAttribute('data-clozeonimage-validation-for'));
+        $arrow = $xpath->query('./span[@aria-hidden="true"]', $message);
+        $this->assertCount(1, $arrow);
+        $this->assertStringContainsString('aria-hidden="true">↑</span>', $this->currentoutput);
+        $this->assertSame('qtype-clozeonimage-validation-arrow', $arrow->item(0)->getAttribute('class'));
+        $message->removeChild($arrow->item(0));
+        $this->assertSame(get_string('invalidnumericalresponse', 'qtype_clozeonimage'), $message->textContent);
+        $this->process_submission(['sub1_answer' => '3.14', '-submit' => 1]);
+        $this->check_current_state(\question_state::$gradedright);
+        $this->render();
+        $this->assertStringNotContainsString('qtype-clozeonimage-validation-arrow', $this->currentoutput);
+    }
+
     /**
      * Make a renderable question with a real background-image file.
      */
@@ -87,12 +114,15 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
             1 => (object) ['xleft' => 12, 'ytop' => 12, 'anchor' => 4],
         ];
         $question->displaywidth = 321;
+        $question->composition = \qtype_clozeonimage\local\composition::defaults();
+        $question->images = [(object)['id' => $questionid, 'elementkey' => str_repeat('a', 32),
+            'name' => 'Force diagram', 'xleft' => 0, 'ytop' => 0, 'width' => 321, 'height' => 321, 'layer' => 0]];
         $question->controlappearance = $controlappearance;
 
         get_file_storage()->create_file_from_string((object) [
             'contextid' => $question->contextid,
             'component' => 'qtype_clozeonimage',
-            'filearea' => 'bgimage',
+            'filearea' => 'image',
             'itemid' => $question->id,
             'filepath' => '/',
             'filename' => 'private-background-filename.png',
@@ -182,7 +212,7 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
      */
     private function xpath(string $html): \DOMXPath {
         $document = new \DOMDocument();
-        @$document->loadHTML($html);
+        @$document->loadHTML('<?xml encoding="UTF-8">' . $html);
         return new \DOMXPath($document);
     }
 
@@ -300,36 +330,21 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
     private function assert_background_image(string $html): void {
         global $CFG;
         $document = new \DOMDocument();
-        @$document->loadHTML($html);
+        @$document->loadHTML('<?xml encoding="UTF-8">' . $html);
         $xpath = new \DOMXPath($document);
         $images = $xpath->query(
-            '//img[contains(concat(" ", normalize-space(@class), " "), " qtype-clozeonimage-image ")]'
+            '//img[contains(concat(" ", normalize-space(@class), " "), " qtype-clozeonimage-scene-image ")]'
         );
 
         $this->assertCount(1, $images);
         $image = $images->item(0);
-        $this->assertSame(get_string('backgroundimagealt', 'qtype_clozeonimage'), $image->getAttribute('alt'));
+        $this->assertSame('Force diagram', $image->getAttribute('alt'));
         $this->assertStringNotContainsString('private-background-filename.png', $image->getAttribute('alt'));
         $this->assertStringContainsString('private-background-filename.png', $image->getAttribute('src'));
-        $this->assertSame('qtype-clozeonimage-image', $image->getAttribute('class'));
-        $this->assertSame('max-width:none;height:auto;width:321px;', $image->getAttribute('style'));
-        $buttons = $xpath->query('//button[@data-action="clozeonimage-toggle-panorama"]');
-        $this->assertCount(1, $buttons);
-        $button = $buttons->item(0);
-        $this->assertSame('button', $button->getAttribute('type'));
-        $this->assertSame('false', $button->getAttribute('aria-pressed'));
-        $this->assertTrue($button->hasAttribute('hidden'));
-        $this->assertSame(get_string('panoramicview', 'qtype_clozeonimage'), $button->textContent);
-        $this->assertSame(get_string('exitpanoramicview', 'qtype_clozeonimage'), $button->getAttribute('data-panorama-label'));
-        $viewport = $xpath->query('//div[@class="qtype-clozeonimage-scroll"]')->item(0);
-        $qa = $this->get_question_attempt();
-        $this->assertSame(
-            'qtype_clozeonimage:wide:v1:' . sha1($CFG->wwwroot) .
-            ':usage:' . $qa->get_usage_id() . ':slot:' . $qa->get_slot() . ':question:' . $qa->get_question_id(),
-            $viewport->getAttribute('data-wide-key')
-        );
-        $this->assertSame($viewport->getAttribute('id'), $button->getAttribute('aria-controls'));
-        $this->assertSame('qtype-clozeonimage-view-controls', $viewport->nextSibling->getAttribute('class'));
+        $this->assertSame('qtype-clozeonimage-scene-image', $image->getAttribute('class'));
+        $this->assertSame('position:absolute;left:0px;top:0px;width:321px;height:321px;z-index:1;', $image->getAttribute('style'));
+        $this->assertCount(0, $xpath->query('//button[@data-action="clozeonimage-toggle-panorama"]'));
+        $this->assertStringNotContainsString('data-wide-key', $html);
     }
 
     public function test_attempt_and_review_use_localized_background_alternative(): void {
@@ -350,6 +365,7 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
      */
     public static function control_appearance_provider(): array {
         return [
+            'transparent' => [2, 'qtype-clozeonimage-appearance-transparent'],
             'translucent' => [
                 \qtype_clozeonimage::CONTROL_APPEARANCE_TRANSLUCENT,
                 'qtype-clozeonimage-appearance-translucent',
@@ -368,7 +384,7 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
         $this->render();
 
         $this->assertStringContainsString(
-            'class="qtype-clozeonimage-composition ' . $class . '"',
+            'class="qtype-clozeonimage-composition ' . $class . ' qtype-clozeonimage-block-appearance-transparent"',
             $this->currentoutput
         );
     }
@@ -413,7 +429,8 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
             }
             $this->render();
             $xpath = $this->xpath($this->currentoutput);
-            $composition = $xpath->query('//div[@class="qtype-clozeonimage-composition ' . $class . '"]');
+            $composition = $xpath->query('//div[contains(concat(" ", normalize-space(@class), " "), ' .
+                '" qtype-clozeonimage-composition " ) and contains(concat(" ", normalize-space(@class), " "), " ' . $class . ' ")]');
             $this->assertCount(1, $composition, $phase);
             $controls = $xpath->query('.//input[not(@type="hidden")] | .//select', $composition->item(0));
             $this->assertGreaterThan(0, $controls->length, $type . ' ' . $phase);
@@ -424,7 +441,8 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
                     $type . ' ' . $phase
                 );
             }
-            $this->assertCount(1, $xpath->query('.//div[@style="left:12px;top:12px;"]', $composition->item(0)));
+            $this->assertCount(1, $xpath->query('.//div[contains(@style, "left:12px;top:12px;") ' .
+                'and contains(@class, "qtype-clozeonimage-block-auto")]', $composition->item(0)));
             $this->assertCount(1, $xpath->query('.//img[contains(@style, "width:321px")]', $composition->item(0)));
         }
     }
@@ -620,14 +638,17 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
         $this->assertSame('button', $button->getAttribute('type'));
         $this->assertTrue($button->hasAttribute('hidden'));
         $this->assertSame(
-            get_string('clearchoiceforsubquestion', 'qtype_clozeonimage', 1),
+            get_string('clearmychoice', 'qtype_clozeonimage'),
             $button->getAttribute('title')
         );
         $this->assertStringContainsString(
-            get_string('clearchoiceforsubquestion', 'qtype_clozeonimage', 1),
+            get_string('clearmychoice', 'qtype_clozeonimage'),
             $button->textContent
         );
-        $this->assertCount(1, $xpath->query('.//span[@aria-hidden="true" and text()="C"]', $button));
+        $icons = $xpath->query('.//svg[@aria-hidden="true" and @focusable="false"]', $button);
+        $this->assertCount(1, $icons);
+        $this->assertSame('18', $icons->item(0)->getAttribute('width'));
+        $this->assertSame('18', $icons->item(0)->getAttribute('height'));
     }
 
     /**
@@ -754,6 +775,15 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
             $names[] = $sentinels->item(0)->getAttribute('name');
             $ids[] = $sentinels->item(0)->getAttribute('id');
             $this->assertTrue($buttons->item(0)->hasAttribute('hidden'));
+            $button = $buttons->item(0);
+            $group = $xpath->query('.//*[@role="radiogroup"]', $region)->item(0);
+            $this->assertSame($group->getAttribute('id'), $button->getAttribute('aria-controls'));
+            $labelids = explode(' ', $button->getAttribute('aria-labelledby'));
+            $this->assertCount(2, $labelids);
+            $this->assertSame($group->getAttribute('aria-labelledby'), $labelids[1]);
+            $this->assertSame(get_string('clearmychoice', 'qtype_clozeonimage'),
+                $xpath->query('.//span[@id="' . $labelids[0] . '"]', $button)->item(0)->textContent);
+            $this->assertCount(1, $xpath->query('.//span[@id="' . $labelids[1] . '"]', $group));
         }
         $this->assertCount(2, array_unique($names));
         $this->assertCount(2, array_unique($ids));
@@ -1138,19 +1168,19 @@ final class renderer_test extends \qbehaviour_walkthrough_test_base {
         return [
             'vertical translucent' => [
                 'multiresponse_vertical', \qtype_clozeonimage::CONTROL_APPEARANCE_TRANSLUCENT,
-                'qtype-clozeonimage-appearance-translucent', 'div',
+                'qtype-clozeonimage-appearance-translucent', 'span',
             ],
             'vertical opaque' => [
                 'multiresponse_vertical', \qtype_clozeonimage::CONTROL_APPEARANCE_OPAQUE,
-                'qtype-clozeonimage-appearance-opaque', 'div',
+                'qtype-clozeonimage-appearance-opaque', 'span',
             ],
             'horizontal translucent' => [
                 'multiresponse_horizontal', \qtype_clozeonimage::CONTROL_APPEARANCE_TRANSLUCENT,
-                'qtype-clozeonimage-appearance-translucent', 'td',
+                'qtype-clozeonimage-appearance-translucent', 'span',
             ],
             'horizontal opaque' => [
                 'multiresponse_horizontal', \qtype_clozeonimage::CONTROL_APPEARANCE_OPAQUE,
-                'qtype-clozeonimage-appearance-opaque', 'td',
+                'qtype-clozeonimage-appearance-opaque', 'span',
             ],
         ];
     }

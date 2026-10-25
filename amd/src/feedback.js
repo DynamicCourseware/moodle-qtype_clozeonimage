@@ -52,6 +52,7 @@ define(['theme_boost/index', 'theme_boost/loader'], function(Bootstrap) {
         'data-bs-content',
         'data-bs-placement',
         'data-bs-trigger',
+        'data-bs-animation',
         'data-bs-html',
         'data-bs-custom-class',
         'aria-describedby',
@@ -61,6 +62,20 @@ define(['theme_boost/index', 'theme_boost/loader'], function(Bootstrap) {
     let pinnedTrigger = null;
     let dismissedTrigger = null;
     const ownedPopovers = new WeakSet();
+
+    /**
+     * Bootstrap owns its popover description, but must not replace the numerical error association.
+     * @param {HTMLElement} trigger Field whose popover was inserted, hidden or discarded.
+     */
+    const retainValidationDescription = trigger => {
+        const error = document.getElementById(`${trigger.id}-error`);
+        if (trigger.getAttribute('aria-invalid') !== 'true' ||
+                !error?.classList.contains('qtype-clozeonimage-numerical-validation')) {
+            return;
+        }
+        const descriptions = (trigger.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean);
+        trigger.setAttribute('aria-describedby', [...new Set([...descriptions, error.id])].join(' '));
+    };
 
     /**
      * Hide one feedback popover and optionally remove focus from its trigger.
@@ -117,6 +132,7 @@ define(['theme_boost/index', 'theme_boost/loader'], function(Bootstrap) {
      * @param {Event} event Popover hidden event.
      */
     const popoverHidden = event => {
+        retainValidationDescription(event.target);
         if (event.target === transientTrigger) {
             transientTrigger = null;
         }
@@ -140,6 +156,7 @@ define(['theme_boost/index', 'theme_boost/loader'], function(Bootstrap) {
         Bootstrap.Popover.getInstance(trigger)?.dispose();
         trigger.classList.remove('qtype-clozeonimage-feedback-trigger');
         popoverAttributes.forEach(attribute => trigger.removeAttribute(attribute));
+        retainValidationDescription(trigger);
     };
 
     /**
@@ -186,6 +203,11 @@ define(['theme_boost/index', 'theme_boost/loader'], function(Bootstrap) {
 
         document.addEventListener('hide.bs.popover', preventPinnedHide, true);
         document.addEventListener('hidden.bs.popover', popoverHidden, true);
+        document.addEventListener('inserted.bs.popover', event => {
+            if (event.target.matches(triggerSelector)) {
+                retainValidationDescription(event.target);
+            }
+        }, true);
         // Restoring focus after a view change must not reopen feedback dismissed with Escape.
         document.addEventListener('show.bs.popover', event => {
             if (event.target === dismissedTrigger) {
@@ -300,8 +322,8 @@ define(['theme_boost/index', 'theme_boost/loader'], function(Bootstrap) {
             // A closed but focused trigger must not consume a second Escape intended for the view.
             const trigger = [eventTrigger, transientTrigger, pinnedTrigger, ...document.querySelectorAll(triggerSelector)]
                 .find(candidate => {
-                    const popup = document.getElementById(candidate?.getAttribute('aria-describedby'));
-                    return popup?.classList.contains('show');
+                    return (candidate?.getAttribute('aria-describedby') || '').split(/\s+/).some(id =>
+                        document.getElementById(id)?.matches('.popover.show'));
                 });
             if (!trigger) {
                 return;

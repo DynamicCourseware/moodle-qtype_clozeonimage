@@ -38,9 +38,15 @@ class backup_qtype_clozeonimage_plugin extends backup_qtype_plugin {
 
         $options = new backup_nested_element('clozeonimage', ['id'], [
             'questionid',
+            'formatversion',
+            'composition',
             'sequence',
+            'showcomposition',
+            'introcount',
+            'aftercount',
             'displaymode',
             'displaywidth',
+            'blockappearance',
             'controlappearance',
             'aftertext',
             'aftertextformat',
@@ -52,6 +58,10 @@ class backup_qtype_clozeonimage_plugin extends backup_qtype_plugin {
             'xleft',
             'ytop',
             'anchor',
+            'content',
+            'contentformat',
+            'width',
+            'slotcount', 'elementkey', 'relativeimage', 'relativex', 'relativey', 'layer', 'stickybottom', 'stickytop', 'stickyhorizontal',
         ]);
 
         $pluginwrapper->add_child($options);
@@ -68,6 +78,12 @@ class backup_qtype_clozeonimage_plugin extends backup_qtype_plugin {
             'no ASC'
         );
 
+        $images = new backup_nested_element('images');
+        $image = new backup_nested_element('image', ['id'], ['questionid', 'elementkey', 'name',
+            'xleft', 'ytop', 'width', 'height', 'layer']);
+        $pluginwrapper->add_child($images);
+        $images->add_child($image);
+        $image->set_source_table('qtype_clozeonimage_img', ['questionid' => backup::VAR_PARENTID], 'layer, id');
         return $plugin;
     }
 
@@ -78,8 +94,10 @@ class backup_qtype_clozeonimage_plugin extends backup_qtype_plugin {
      */
     public static function get_qtype_fileareas() {
         return [
+            'image' => 'qtype_clozeonimage_img',
             'bgimage' => 'question_created',
             'aftertext' => 'question_created',
+            'blockcontent' => 'qtype_clozeonimage_pos',
         ];
     }
 }

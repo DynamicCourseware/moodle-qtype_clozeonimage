@@ -226,7 +226,7 @@ final class position_corruption_test extends \qbehaviour_walkthrough_test_base {
     private function get_row_value(\MoodleQuickForm $form, int $index, string $name): mixed {
         foreach ($form->getElement('subquestionrow[' . $index . ']')->getElements() as $element) {
             if ($element->getName() === $name . '[' . $index . ']') {
-                return $element->getValue();
+                return $name === 'subquestion' ? \qtype_clozeonimage::source_text($element->getValue()) : $element->getValue();
             }
         }
         $this->fail('Could not find repeated element ' . $name . '[' . $index . '].');
@@ -247,7 +247,7 @@ final class position_corruption_test extends \qbehaviour_walkthrough_test_base {
             'name' => $question->name,
             'questiontext' => $questiontext,
             'generalfeedback' => $generalfeedback,
-            'bgimage' => $question->bgimage,
+            'sceneimage' => $question->sceneimage ?? [],
             'displaywidth' => 1,
             'subquestion' => $sources,
         ];

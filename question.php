@@ -35,6 +35,37 @@ require_once($CFG->dirroot . '/question/type/multianswer/question.php');
  * A Cloze composite question whose subquestions are positioned on an image.
  */
 class qtype_clozeonimage_question extends qtype_multianswer_question {
+    /** @var array Explicit field widths indexed by flat child slot; derived from original source. */
+    public $fieldwidths = [];
+
+    /** @var stdClass[] Formatted blocks with consecutive flat Cloze slots. */
+    public $blocks = [];
+
+    /** @var stdClass|null Parsed initial text and its child slots. */
+    public $intro = null;
+
+    /** @var int Number of initial-text child questions. */
+    public $introcount = 0;
+
+    /** @var int Number of additional-text child questions. */
+    public $aftercount = 0;
+
+    /** @var bool Whether retained blocks are displayed. */
+    public $hasbackgroundimage = false;
+
+    /** @var array Saved autonomous rectangle and appearance. */
+    public $composition = [];
+    /** @var array Independent image records. */
+    public $images = [];
+    /** @var int Explicit content format. */
+    public $formatversion = 2;
+
+    /** @var bool Whether the author allows the composition to be displayed. */
+    public $showcomposition = true;
+
+    /** @var stdClass|null Parsed additional text and its child slots. */
+    public $additional = null;
+
     /** @var string Comma-separated IDs of the wrapped subquestions. */
     public $sequence = '';
 
@@ -55,6 +86,9 @@ class qtype_clozeonimage_question extends qtype_multianswer_question {
 
     /** @var int Answer control appearance. */
     public $controlappearance = 0;
+
+    /** @var int Independent block background (transparent by default). */
+    public $blockappearance = 2;
 
     /** @var string Text displayed after the image. */
     public $aftertext = '';
@@ -113,8 +147,27 @@ class qtype_clozeonimage_question extends qtype_multianswer_question {
             if (empty($args)) {
                 return false;
             }
+            if ($filearea === 'bgimage' && !$this->showcomposition) {
+                return false;
+            }
             $itemid = (int) reset($args);
             return $itemid === (int) $this->id;
+        }
+
+        if ($component === 'qtype_clozeonimage' && $filearea === 'image') {
+            return \qtype_clozeonimage\local\composition::active($this) && !empty($args) &&
+                in_array((int)reset($args), array_map(fn($image) => (int)$image->id, $this->images), true);
+        }
+        if ($component === 'qtype_clozeonimage' && $filearea === 'blockcontent' && $args && (int)reset($args) > 0) {
+            if (!\qtype_clozeonimage\local\composition::active($this)) {
+                return false;
+            }
+            foreach ($this->blocks as $block) {
+                if ((int)($block->position->id ?? 0) === (int)reset($args)) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         return parent::check_file_access($qa, $options, $component, $filearea, $args, $forcedownload);
@@ -124,8 +177,9 @@ class qtype_clozeonimage_question extends qtype_multianswer_question {
      * Return a useful plain-text summary without relying on Cloze text markers.
      */
     public function get_question_summary() {
-        $summary = $this->html_to_text($this->questiontext, $this->questiontextformat);
-        foreach ($this->subquestions as $subq) {
+        $summary = '';
+        $parts = [];
+        foreach ($this->subquestions as $index => $subq) {
             switch ($subq->qtype->name()) {
                 case 'multichoice':
                     $choices = [];
@@ -136,16 +190,35 @@ class qtype_clozeonimage_question extends qtype_multianswer_question {
                             $subq->answers[$ansid]->answerformat
                         );
                     }
-                    $summary .= ' {' . implode('; ', $choices) . '}';
+                    $parts[$index] = '{' . implode('; ', $choices) . '}';
                     break;
                 case 'numerical':
                 case 'shortanswer':
-                    $summary .= ' _____';
+                    $parts[$index] = '_____';
                     break;
             }
         }
+        $summarise = function($zone) use ($parts) {
+            $text = preg_replace_callback('/\{#([0-9]+)\}/', function($match) use ($zone, $parts) {
+                return $parts[$zone->slots[(int)$match[1] - 1] ?? 0] ?? '_____';
+            }, $zone->text);
+            return $this->html_to_text($text, $zone->format);
+        };
+        $summary = $this->intro ? $summarise($this->intro) :
+            $this->html_to_text($this->questiontext, $this->questiontextformat);
+        if ($this->blocks && \qtype_clozeonimage\local\composition::active($this)) {
+            foreach ($this->blocks as $block) {
+                $text = preg_replace_callback('/\{#([0-9]+)\}/', function($match) use ($block, $parts) {
+                    return $parts[$block->slots[(int)$match[1] - 1] ?? 0] ?? '_____';
+                }, $block->text);
+                $summary .= ' ' . $this->html_to_text($text, $block->format);
+            }
+        } else if ($this->intro === null && $this->additional === null) {
+            $summary .= ' ' . implode(' ', $parts);
+        }
         if ($this->aftertext !== '') {
-            $summary .= ' ' . $this->html_to_text($this->aftertext, $this->aftertextformat);
+            $summary .= ' ' . ($this->additional ? $summarise($this->additional) :
+                $this->html_to_text($this->aftertext, $this->aftertextformat));
         }
         return trim($summary);
     }

@@ -38,6 +38,7 @@ class restore_qtype_clozeonimage_plugin extends restore_qtype_plugin {
     protected function define_question_plugin_structure() {
         return [
             new restore_path_element('clozeonimage', $this->get_pathfor('/clozeonimage')),
+            new restore_path_element('clozeonimage_image', $this->get_pathfor('/images/image')),
             new restore_path_element('clozeonimage_position', $this->get_pathfor('/positions/position')),
         ];
     }
@@ -54,6 +55,9 @@ class restore_qtype_clozeonimage_plugin extends restore_qtype_plugin {
 
         $data = (object) $data;
         $oldid = $data->id;
+        if (isset($data->layer)) {
+            $data->layer = \qtype_clozeonimage\local\composition::layer($data->layer);
+        }
         $oldquestionid = $this->get_old_parentid('question');
         $questioncreated = (bool) $this->get_mappingid('question_created', $oldquestionid);
 
@@ -73,12 +77,30 @@ class restore_qtype_clozeonimage_plugin extends restore_qtype_plugin {
         global $DB;
 
         $data = (object) $data;
+        if (isset($data->layer)) {
+            $data->layer = \qtype_clozeonimage\local\composition::layer($data->layer);
+        }
         $oldquestionid = $this->get_old_parentid('question');
         $questioncreated = (bool) $this->get_mappingid('question_created', $oldquestionid);
 
         if ($questioncreated) {
             $data->questionid = $this->get_new_parentid('question');
-            $DB->insert_record('qtype_clozeonimage_pos', $data);
+            $newid = $DB->insert_record('qtype_clozeonimage_pos', $data);
+            $this->set_mapping('qtype_clozeonimage_pos', $data->id, $newid);
+        }
+    }
+
+    /** Restore a question-scoped image key; remap its database ID for the file area. */
+    public function process_clozeonimage_image($data) {
+        global $DB;
+        $data = (object)$data;
+        $data->layer = \qtype_clozeonimage\local\composition::layer($data->layer ?? 0);
+        if ($this->get_mappingid('question_created', $this->get_old_parentid('question'))) {
+            $oldid = $data->id;
+            $data->questionid = $this->get_new_parentid('question');
+            unset($data->id);
+            $id = $DB->insert_record('qtype_clozeonimage_img', $data);
+            $this->set_mapping('qtype_clozeonimage_img', $oldid, $id);
         }
     }
 
@@ -167,6 +189,7 @@ class restore_qtype_clozeonimage_plugin extends restore_qtype_plugin {
     public static function define_decode_contents() {
         return [
             new restore_decode_content('qtype_clozeonimage', ['aftertext'], 'qtype_clozeonimage'),
+            new restore_decode_content('qtype_clozeonimage_pos', ['content'], 'qtype_clozeonimage_pos'),
         ];
     }
 
@@ -182,8 +205,11 @@ class restore_qtype_clozeonimage_plugin extends restore_qtype_plugin {
         $questiondata->options->positions = [];
         foreach ($positions as $positiondata) {
             $position = (object) $positiondata;
+            $position->stickybottom = (int)($position->stickybottom ?? 0);
             $questiondata->options->positions[(int) $position->no] = $position;
         }
+        $questiondata->options->images = array_map(fn($image) => (object)$image,
+            $backupdata['plugin_qtype_clozeonimage_question']['images']['image'] ?? []);
         return $questiondata;
     }
 
@@ -195,6 +221,8 @@ class restore_qtype_clozeonimage_plugin extends restore_qtype_plugin {
     protected function define_excluded_identity_hash_fields(): array {
         return [
             '/options/sequence',
+            '/options/images/id',
+            '/options/images/questionid',
             '/options/positions/id',
             '/options/positions/questionid',
         ];

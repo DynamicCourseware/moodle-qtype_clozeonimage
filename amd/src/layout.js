@@ -6,115 +6,55 @@
 // (at your option) any later version.
 
 /**
- * Reserve composition space and initialise the optional student Wide view.
+ * Measure, place and scroll the shared composition coordinate system.
  *
  * @module     qtype_clozeonimage/layout
  * @copyright  2026 DynamicCourseware.org (Dominique Bauer)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-define([], function() {
+define(['core/pagehelpers', 'core/pending', 'qtype_clozeonimage/composition_geometry',
+    'qtype_clozeonimage/sticky'], function(PageHelpers, Pending, Geometry, Sticky) {
 
     'use strict';
 
     const compositionSelector =
         '.qtype-clozeonimage-composition, .qtype-clozeonimage-preview-composition';
     const imageSelector = '.qtype-clozeonimage-image, .qtype-clozeonimage-preview-image';
-    const controlSelector = '.qtype-clozeonimage-subquestion, .qtype-clozeonimage-preview-subquestion';
+    const controlSelector = '.qtype-clozeonimage-subquestion, .qtype-clozeonimage-preview-subquestion, ' +
+        '.qtype-clozeonimage-scene-image, .qtype-clozeonimage-preview-scene-image';
     const runtimeCompositionSelector = '.qtype-clozeonimage-composition';
     const openFixedDrawerSelector = '[data-region="fixed-drawer"].show';
     const drawerHiddenEvent = 'theme_boost/drawers:hidden';
     const layouts = new Map();
     let drawerOverflowCleanupInitialised = false;
+    let answerFocusEvent = null;
 
-    const panoramas = new Map();
+    const blockGeometry = new WeakMap();
+    const normalPlacements = new WeakMap();
+    const activeGeometry = new WeakMap();
+    const activeEdits = new WeakSet();
+    const adaptiveSelector = 'input[data-clozeonimage-field-min][data-clozeonimage-field-max]';
+    const transientSelector = '.popover, .qtype-clozeonimage-numerical-validation, .qtype-clozeonimage-review-surface, ' +
+        '.qtype-clozeonimage-preview-number, .qtype-clozeonimage-preview-selection-mark, ' +
+        '.qtype-clozeonimage-resize, .qtype-clozeonimage-image-resize, .qtype-clozeonimage-composition-resize';
+    let caretProbe;
+
     const drawerSelector = '.drawer.drawer-left, .drawer.drawer-right, #nav-drawer, [data-region="right-hand-drawer"]';
-    const interactiveSelector = [
-        '.qtype-clozeonimage-subquestion', 'input', 'select', 'textarea', 'button', 'a', 'label',
-        '[tabindex]', '[contenteditable]:not([contenteditable="false"])', '[role]', '[data-action]',
-        '[data-bs-toggle]', '.popover', '.qtype-clozeonimage-feedback-trigger',
-    ].join(',');
-    const activeClass = 'qtype-clozeonimage-panorama-active';
-    const toggleSelector = '[data-action="clozeonimage-toggle-panorama"]';
-    // Remember Wide questions through AJAX replacement, including when session storage is blocked.
-    const activeQuestions = new Set();
-    let modeControlsInitialised = false;
-    let geometryEvents;
-    let geometryMutations;
-    let frame = 0;
-    const transitions = new Map();
-    let geometryObserver;
-    let modePositionFrame = 0;
 
     /**
-     * Permit session persistence only in Moodle's active quiz response form.
-     * Review, reviewquestion and question preview deliberately never read attempt state.
+     * Keep the union origin at a fixed gutter in the scroll track, using only current bounds.
      *
-     * @param {HTMLElement} question Rendered question.
-     * @returns {String|null} Server-provided site/usage/slot/question key, or null outside an attempt.
+     * @param {Number} viewport Available viewport width.
+     * @param {Object} bounds Persistent image/content union relative to the image.
+     * @param {Number} scroll Current native scroll position, independent of the origin.
+     * @param {Number} gutter Horizontal inset at each end.
+     * @returns {Object} Current track dimensions, origin and clamped native scroll position.
      */
-    const attemptStorageKey = question => {
-        const form = question.closest('form#responseform');
-        if (document.body.id !== 'page-mod-quiz-attempt' ||
-                !/^[1-9]\d*$/.test(form?.querySelector('input[type="hidden"][name="attempt"]')?.value ?? '')) {
-            return null;
-        }
-        return question.querySelector('.qtype-clozeonimage-scroll')?.dataset.wideKey || null;
-    };
-
-    /**
-     * Keep page-local AJAX memory separate between attempt, review and preview contexts.
-     *
-     * @param {HTMLElement} question Rendered question.
-     * @returns {String} Context-scoped question identity.
-     */
-    const questionStateKey = question => attemptStorageKey(question) ?? `${document.body.id}:${question.id}`;
-
-    /**
-     * Read or change this question's attempt-scoped state; blocked storage leaves page-local mode working.
-     *
-     * @param {String|null} key Attempt-scoped key, or null on non-attempt pages.
-     * @param {Boolean|undefined} wide Undefined to read, true to store, false to remove.
-     * @returns {Boolean} Whether this question is stored as Wide.
-     */
-    const storedWideView = (key, wide = undefined) => {
-        if (!key) {
-            return false;
-        }
-        try {
-            if (wide === true) {
-                window.sessionStorage.setItem(key, '1');
-            } else if (wide === false) {
-                window.sessionStorage.removeItem(key);
-            }
-            return window.sessionStorage.getItem(key) === '1';
-        } catch (error) {
-            // Private-browser policies or a full storage quota must not break question interaction.
-            return false;
-        }
-    };
-
-    /**
-     * Scrollbar endpoints align the complete visual union with the two usable gutter edges.
-     * A fitting union travels right as scrollLeft increases; an overflowing union uses native leftward travel.
-     *
-     * @param {Number} width Image width (never scaled).
-     * @param {Number} viewport Viewport width.
-     * @param {Number} left Viewport's screen left edge.
-     * @param {Number|null} previous Desired image screen left edge, or null at first load.
-     * @param {Object} bounds Image/control visual union relative to the image origin.
-     * @param {Number} gutter Horizontal inset inside each viewport border.
-     * @returns {Object} Track padding, width and clamped scroll position.
-     */
-    const panGeometry = (width, viewport, left, previous = null,
-            bounds = {minX: 0, maxX: width, minY: 0, maxY: 0}, gutter = 0) => {
-        const usable = Math.max(0, viewport - 2 * gutter);
-        const unionWidth = bounds.maxX - bounds.minX;
-        const direction = unionWidth < usable ? 1 : -1;
-        const space = gutter - bounds.minX;
-        const range = Math.abs(usable - unionWidth);
-        const desired = Number.isFinite(previous) ? previous : left + space + Math.max(0, usable - unionWidth) / 2;
-        return {space, direction, range, track: viewport + range,
-            scroll: Math.max(0, Math.min(range, (desired - left - space) * direction)),
+    const scrollGeometry = (viewport, bounds, scroll = 0, gutter = 0) => {
+        const track = Math.max(viewport, bounds.maxX - bounds.minX + 2 * gutter);
+        const range = track - viewport;
+        return {space: gutter - bounds.minX, range, track,
+            scroll: Math.max(0, Math.min(range, scroll)),
             top: Math.max(0, -bounds.minY), height: bounds.maxY - bounds.minY};
     };
 
@@ -134,25 +74,29 @@ define([], function() {
     });
 
     /**
-     * Measure painted controls as well as their wrappers (Clear, feedback surfaces and focus outlines).
+     * Measure persistent block content, including protruding descendants and text.
+     * Transient feedback/focus decorations must never move the composition origin.
      * Screen-reader-only content must not turn its offscreen positioning into canvas space.
      *
      * @param {HTMLElement} composition Unchanged image/control coordinate system.
-     * @param {Object} state Active panorama and its currently observed bounds elements.
+     * @param {Boolean} omitBase Measure content only for explicit editor reduction.
      * @returns {Object|null} Image rectangle, image offset inside composition, and visual union, if rendered.
      */
-    const measureContent = (composition, state) => {
+    const measureContent = (composition, omitBase = false) => {
         const image = composition.querySelector(imageSelector);
-        if (!image?.getClientRects().length) {
+        const base = composition.dataset.composition ? JSON.parse(composition.dataset.composition) : null;
+        if (!base && !image?.getClientRects().length) {
             return null;
         }
-        const imageRect = image.getBoundingClientRect();
         const origin = composition.getBoundingClientRect();
-        const observed = new Set([image]);
+        const imageRect = base ? {left: origin.left, top: origin.top, width: base.width, height: base.height}
+            : image.getBoundingClientRect();
+        const observed = new Set(image ? [image] : []);
         const rectangles = [];
         composition.querySelectorAll(controlSelector).forEach(control => {
             [control, ...control.querySelectorAll('*')].forEach(element => {
-                if (element.closest('.accesshide, .visually-hidden, .sr-only, [hidden]')) {
+                if (element.closest('.accesshide, .visually-hidden, .sr-only, [hidden]') ||
+                        element.closest(transientSelector)) {
                     return;
                 }
                 const rect = visibleRect(element);
@@ -160,36 +104,26 @@ define([], function() {
                     return;
                 }
                 observed.add(element);
-                const style = window.getComputedStyle(element);
-                const outline = style.outlineStyle === 'none' ? 0 :
-                    Math.max(0, parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset));
-                const outset = {left: outline, right: outline, top: outline, bottom: outline};
-                // Include theme focus-ring spread; inset shadows never extend visual bounds.
-                style.boxShadow.split(/,(?![^(]*\))/).filter(shadow => !shadow.includes('inset')).forEach(shadow => {
-                    const values = shadow.match(/-?[\d.]+px/g)?.map(parseFloat);
-                    if (values?.length >= 3) {
-                        const [x, y, blur, spread = 0] = values;
-                        const radius = Math.max(0, spread + blur * 1.5);
-                        outset.left = Math.max(outset.left, radius - x);
-                        outset.right = Math.max(outset.right, radius + x);
-                        outset.top = Math.max(outset.top, radius - y);
-                        outset.bottom = Math.max(outset.bottom, radius + y);
+                rectangles.push({left: rect.left - imageRect.left, right: rect.right - imageRect.left,
+                    top: rect.top - imageRect.top, bottom: rect.bottom - imageRect.top});
+                // Element boxes alone miss unwrapped text protruding beyond a fixed-width parent.
+                element.childNodes.forEach(node => {
+                    if (node.nodeType !== Node.TEXT_NODE || !node.textContent.trim()) {
+                        return;
                     }
+                    const range = document.createRange();
+                    range.selectNodeContents(node);
+                    Array.from(range.getClientRects()).forEach(text => rectangles.push({
+                        left: text.left - imageRect.left, right: text.right - imageRect.left,
+                        top: text.top - imageRect.top, bottom: text.bottom - imageRect.top,
+                    }));
                 });
-                rectangles.push({left: rect.left - imageRect.left - outset.left,
-                    right: rect.right - imageRect.left + outset.right,
-                    top: rect.top - imageRect.top - outset.top, bottom: rect.bottom - imageRect.top + outset.bottom});
             });
         });
-        state.boundsElements.forEach(element => {
-            if (!observed.has(element)) {
-                geometryObserver?.unobserve(element);
-            }
-        });
-        observed.forEach(element => geometryObserver?.observe(element));
-        state.boundsElements = observed;
         return {image: imageRect, offsetX: imageRect.left - origin.left, offsetY: imageRect.top - origin.top,
-            bounds: contentBounds(imageRect.width, imageRect.height, rectangles)};
+            bounds: base ? Geometry.extent(omitBase ? {...base, x: rectangles.length ? rectangles[0].left : base.x,
+                y: rectangles.length ? rectangles[0].top : base.y, width: 0, height: 0, locked: false} : base, rectangles)
+                : contentBounds(imageRect.width, imageRect.height, rectangles)};
     };
 
     /**
@@ -233,630 +167,28 @@ define([], function() {
         return right > left && bottom > top ? {left, right, top, bottom} : null;
     };
 
-    /** Schedule one geometry pass; animation frames run only during relevant CSS transitions. */
-    const schedulePanoramas = () => {
-        if (panoramas.size && !frame) {
-            frame = window.requestAnimationFrame(updatePanoramas);
-        }
-    };
-
-    /** Measure available screen space and preserve each composition's last screen position. */
-    const updatePanoramas = () => {
-        frame = 0;
-        const visual = window.visualViewport;
-        const screenLeft = visual ? visual.offsetLeft : 0;
-        const screenRight = Math.min(document.documentElement.clientWidth,
-            visual ? visual.offsetLeft + visual.width : document.documentElement.clientWidth);
-        const screenTop = visual ? visual.offsetTop : 0;
-        const screenBottom = screenTop + (visual ? visual.height : window.innerHeight);
-        const drawers = [];
-        document.querySelectorAll(drawerSelector).forEach(drawer => {
-            geometryObserver?.observe(drawer);
-            const rect = visibleRect(drawer);
-            if (rect && rect.bottom > screenTop && rect.top < screenBottom) {
-                drawers.push({...rect, side: drawer.matches('.drawer-left, #nav-drawer') ? 'left' : 'right'});
-            }
-        });
-        const available = drawerBounds(screenLeft, screenRight, drawers);
-        panoramas.forEach((state, composition) => {
-            if (!composition.isConnected) {
-                deactivatePanorama(composition, true);
-                return;
-            }
-            const {viewport, anchor, track} = state;
-            const content = measureContent(composition, state);
-            const width = content?.image.width;
-            if (!width || !composition.getClientRects().length) {
-                return;
-            }
-            const previous = state.left === null ? state.initialLeft :
-                state.left + state.space + state.direction * viewport.scrollLeft;
-            const {left, right} = available;
-            const anchorRect = anchor.getBoundingClientRect();
-            const setStyle = (element, property, value) => {
-                if (element.style[property] !== value) {
-                    element.style[property] = value;
-                }
-            };
-            setStyle(viewport, 'width', `${right - left}px`);
-            setStyle(viewport, 'marginLeft', `${left - anchorRect.left}px`);
-            const formulation = viewport.closest('.formulation').getBoundingClientRect();
-            const borderGeometry = {
-                '--panorama-left': left - anchorRect.left,
-                '--panorama-width': right - left,
-                '--panorama-left-wing': Math.max(0, Math.min(right, formulation.left) - left),
-                '--panorama-right-wing': Math.max(0, right - Math.max(left, formulation.right)),
-            };
-            Object.entries(borderGeometry).forEach(([property, value]) => {
-                const pixels = `${value}px`;
-                if (anchor.style.getPropertyValue(property) !== pixels) {
-                    anchor.style.setProperty(property, pixels);
-                }
-            });
-            // Keep gutter space in the track geometry, without padding or changing the breakout border.
-            const innerLeft = left + viewport.clientLeft;
-            const gutter = parseFloat(window.getComputedStyle(viewport).getPropertyValue('--qtype-clozeonimage-panorama-gutter'));
-            const geometry = panGeometry(width, viewport.clientWidth, innerLeft, previous, content.bounds, gutter || 0);
-            setStyle(track, 'width', `${geometry.track}px`);
-            setStyle(track, 'height', `${geometry.height}px`);
-            state.marginLeft = geometry.space - content.offsetX;
-            state.direction = geometry.direction;
-            setStyle(composition, 'marginTop', `${geometry.top - content.offsetY}px`);
-            viewport.scrollLeft = geometry.scroll;
-            positionComposition(composition, state);
-            viewport.classList.toggle('qtype-clozeonimage-panorama-can-drag', geometry.range > 0);
-            state.left = innerLeft;
-            state.space = geometry.space;
-        });
-        // A removed element cannot emit transitionend.
-        transitions.forEach((properties, element) => {
-            if (!element.isConnected) {
-                transitions.delete(element);
-            }
-        });
-        if (transitions.size) {
-            schedulePanoramas();
-        }
-    };
-
     /**
-     * Match narrow-union placement to scrollbar endpoints without changing the composition's coordinates.
-     * Native scrolling subtracts scrollLeft; adding twice that offset gives the required positive travel.
-     * The track already contains the entire range, so this cannot enlarge the native scroll range.
+     * Veto only Boost's false mobile drawer close during a horizontally scrolled answer focus.
+     * core/pagehelpers measures the body's screen right edge, which includes document scrollX.
+     * On a desktop this can falsely report a small screen and reflow the question mid-click.
+     * The current focus event phase distinguishes this synchronous automatic close from a
+     * later explicit drawer action. Normal mobile closing is unaffected.
      *
-     * @param {HTMLElement} composition Unchanged image/control coordinate system.
-     * @param {Object} state Current pan geometry.
+     * @param {CustomEvent} event Moodle's cancelable drawer-hide notification.
      */
-    const positionComposition = (composition, state) => {
-        const offset = state.direction === 1 ? 2 * state.viewport.scrollLeft : 0;
-        const margin = `${state.marginLeft + offset}px`;
-        if (composition.style.marginLeft !== margin) {
-            composition.style.marginLeft = margin;
-        }
-    };
-
-    /**
-     * Add image-only pointer panning without intercepting form controls or vertical touch scrolling.
-     *
-     * @param {HTMLElement} viewport Native horizontal scroll container.
-     * @param {HTMLElement} image Background image surface.
-     * @param {HTMLElement} composition Image/control composition.
-     * @param {Object} state Current pan geometry.
-     * @returns {Function} Cleanup restoring normal browser image interaction.
-     */
-    const enableDrag = (viewport, image, composition, state) => {
-        let drag = null;
-        let suppressClick = false;
-        const events = new AbortController();
-        const signal = events.signal;
-        const draggable = image.getAttribute('draggable');
-        image.draggable = false;
-        image.addEventListener('dragstart', event => event.preventDefault(), {signal});
-        viewport.addEventListener('scroll', () => positionComposition(composition, state), {signal, passive: true});
-        viewport.addEventListener('pointerdown', event => {
-            const interactive = event.target.closest(interactiveSelector);
-            if (event.button !== 0 || !event.isPrimary || event.target !== image ||
-                    (interactive && interactive !== viewport && viewport.contains(interactive)) ||
-                    viewport.scrollWidth <= viewport.clientWidth) {
-                return;
-            }
-            suppressClick = false;
-            drag = {id: event.pointerId, x: event.clientX, moved: false};
-            viewport.setPointerCapture(event.pointerId);
-            viewport.classList.add('qtype-clozeonimage-panorama-dragging');
-        }, {signal});
-        viewport.addEventListener('pointermove', event => {
-            if (!drag || drag.id !== event.pointerId) {
-                return;
-            }
-            const delta = event.clientX - drag.x;
-            if (!drag.moved && Math.abs(delta) < 3) {
-                return;
-            }
-            drag.moved = true;
-            viewport.scrollLeft += delta * state.direction;
-            positionComposition(composition, state);
-            drag.x = event.clientX;
-        }, {signal});
-        const release = event => {
-            if (!drag || drag.id !== event.pointerId) {
-                return;
-            }
-            suppressClick = drag.moved && event.type === 'pointerup';
-            drag = null;
-            viewport.classList.remove('qtype-clozeonimage-panorama-dragging');
-            if (viewport.hasPointerCapture(event.pointerId)) {
-                viewport.releasePointerCapture(event.pointerId);
-            }
-        };
-        ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(type => viewport.addEventListener(type, release, {signal}));
-        viewport.addEventListener('click', event => {
-            if (suppressClick && event.target === viewport) {
-                event.preventDefault();
-                event.stopPropagation();
-            }
-            suppressClick = false;
-        }, {capture: true, signal});
-        return () => {
-            if (drag) {
-                release({pointerId: drag.id});
-            }
-            events.abort();
-            if (draggable === null) {
-                image.removeAttribute('draggable');
-            } else {
-                image.setAttribute('draggable', draggable);
-            }
-        };
-    };
-
-    /** Install geometry listeners only while at least one panorama is active. */
-    const observePanoramas = () => {
-        if (geometryEvents) {
+    const preserveAnswerClick = event => {
+        const target = answerFocusEvent?.target;
+        if (!event.cancelable || event.defaultPrevented || !event.detail?.drawerInstance ||
+                !answerFocusEvent?.eventPhase || target !== document.activeElement ||
+                !target.matches('input, select, textarea, button') ||
+                !target.closest(runtimeCompositionSelector) ||
+                window.scrollX <= 0 || !window.matchMedia('(min-width: 992px)').matches || !PageHelpers.isSmall()) {
             return;
         }
-        geometryEvents = new AbortController();
-        const signal = geometryEvents.signal;
-        if (window.ResizeObserver) {
-            geometryObserver = new window.ResizeObserver(schedulePanoramas);
-        }
-        geometryMutations = new window.MutationObserver(records => {
-            if (records.some(record => {
-                const target = record.target.nodeType === 1 ? record.target : record.target.parentElement;
-                if (!target?.closest('.qtype-clozeonimage-scroll')) {
-                    return true;
-                }
-                const composition = target.closest(runtimeCompositionSelector);
-                // Ignore our own viewport/track/composition styles, but observe actual content changes.
-                return composition && (record.type !== 'attributes' || target !== composition);
-            })) {
-                schedulePanoramas();
-            }
-        });
-        geometryMutations.observe(document.body, {
-            subtree: true, childList: true, characterData: true,
-            attributes: true, attributeFilter: ['class', 'style', 'hidden', 'open'],
-        });
-        ['focusin', 'focusout'].forEach(type => document.addEventListener(type, schedulePanoramas, {signal}));
-        window.addEventListener('resize', schedulePanoramas, {signal});
-        document.addEventListener('scroll', event => {
-            if (!event.target.matches?.('.qtype-clozeonimage-scroll')) {
-                schedulePanoramas();
-            }
-        }, {capture: true, signal});
-        window.visualViewport?.addEventListener('resize', schedulePanoramas, {signal});
-        window.visualViewport?.addEventListener('scroll', schedulePanoramas, {signal});
-        ['theme_boost/drawers:shown', drawerHiddenEvent].forEach(type =>
-            document.addEventListener(type, schedulePanoramas, {signal}));
-        ['transitionrun', 'transitionend', 'transitioncancel'].forEach(type => {
-            document.addEventListener(type, event => {
-                const element = event.target;
-                if (!element.matches(drawerSelector) && !element.querySelector(`.${activeClass}`) &&
-                        !element.closest(runtimeCompositionSelector)?.closest(`.${activeClass}`)) {
-                    return;
-                }
-                if (type === 'transitionrun') {
-                    if (!transitions.has(element)) {
-                        transitions.set(element, new Set());
-                    }
-                    transitions.get(element).add(event.propertyName);
-                } else {
-                    transitions.get(element)?.delete(event.propertyName);
-                    if (!transitions.get(element)?.size) {
-                        transitions.delete(element);
-                    }
-                }
-                schedulePanoramas();
-            }, {signal});
-        });
-    };
-
-    /** Release all panorama geometry observation when the last active question exits. */
-    const stopObservingPanoramas = () => {
-        geometryEvents?.abort();
-        geometryEvents = null;
-        geometryObserver?.disconnect();
-        geometryObserver = null;
-        geometryMutations?.disconnect();
-        geometryMutations = null;
-        transitions.clear();
-        window.cancelAnimationFrame(frame);
-        frame = 0;
-    };
-
-    /**
-     * Save only the inline properties panorama owns, leaving height reservation independent.
-     *
-     * @param {HTMLElement} element Element being modified.
-     * @param {Array} properties CSS properties to restore on exit.
-     * @returns {Function} Restoration callback.
-     */
-    const saveStyles = (element, properties) => {
-        const saved = properties.map(property => [property,
-            element.style.getPropertyValue(property), element.style.getPropertyPriority(property)]);
-        return () => saved.forEach(([property, value, priority]) => {
-            if (value) {
-                element.style.setProperty(property, value, priority);
-            } else {
-                element.style.removeProperty(property);
-            }
-        });
-    };
-
-    /**
-     * Update the localized action and accessible state without replacing the focused button.
-     *
-     * @param {HTMLElement} question Question whose view changed.
-     * @param {Boolean} active Whether panorama is active.
-     */
-    const updateToggle = (question, active) => {
-        const button = question.querySelector(toggleSelector);
-        if (button) {
-            button.hidden = false;
-            button.textContent = active ? button.dataset.panoramaLabel : button.dataset.normalLabel;
-            button.setAttribute('aria-pressed', String(active));
-        }
-    };
-
-    /**
-     * Enter panorama using the existing composition as the image/control coordinate system.
-     *
-     * @param {HTMLElement} composition Runtime composition.
-     */
-    const activatePanorama = composition => {
-        if (panoramas.has(composition)) {
-            return;
-        }
-        const question = composition.closest('.que.clozeonimage');
-        const viewport = composition.closest('.qtype-clozeonimage-scroll');
-        const image = composition.querySelector('.qtype-clozeonimage-image');
-        if (!question || !viewport || !image) {
-            return;
-        }
-        const focused = document.activeElement;
-        const initialLeft = image.getClientRects().length ? image.getBoundingClientRect().left : null;
-        const direction = window.getComputedStyle(composition).direction;
-        const restoreViewport = saveStyles(viewport, ['width', 'margin-left']);
-        const viewportAttributes = ['tabindex', 'role', 'aria-label'].map(name => [name, viewport.getAttribute(name)]);
-        viewport.setAttribute('tabindex', '0');
-        viewport.setAttribute('role', 'region');
-        // Reuse the server-localized mode name without changing the toggle's current action.
-        viewport.setAttribute('aria-label', question.querySelector(toggleSelector).dataset.normalLabel);
-        const restoreComposition = saveStyles(composition, ['direction', 'margin-left', 'margin-top']);
-        const anchor = document.createElement('div');
-        anchor.className = 'qtype-clozeonimage-panorama-anchor';
-        viewport.before(anchor);
-        anchor.append(viewport);
-        const track = document.createElement('div');
-        track.className = 'qtype-clozeonimage-panorama-track';
-        viewport.append(track);
-        track.append(composition);
-        composition.style.direction = direction;
-        question.classList.add(activeClass);
-        viewport.classList.add('qtype-clozeonimage-panorama');
-        const state = {question, viewport, anchor, track, initialLeft, left: null, space: 0, direction: -1, marginLeft: 0,
-            boundsElements: new Set(),
-            storageKey: attemptStorageKey(question),
-            questionKey: questionStateKey(question),
-            restoreViewport, restoreComposition, viewportAttributes};
-        state.stopDrag = enableDrag(viewport, image, composition, state);
-        panoramas.set(composition, state);
-        storedWideView(state.storageKey, true);
-        if (question.id) {
-            activeQuestions.add(state.questionKey);
-        }
-        updateToggle(question, true);
-        observePanoramas();
-        for (let element = anchor; element; element = element.parentElement) {
-            geometryObserver?.observe(element);
-        }
-        geometryObserver?.observe(composition);
-        // Eliminate an old normal-view document scroll offset before measuring screen bounds.
-        // Boost enables smooth root scrolling; this reset must finish before geometry and toggle anchoring.
-        window.scrollTo({left: 0, top: window.scrollY, behavior: 'instant'});
-        if (focused?.isConnected && document.activeElement !== focused) {
-            focused.focus({preventScroll: true});
-        }
-        schedulePanoramas();
-    };
-
-    /**
-     * Test this Normal question's own rendered boxes against the document's scrollable inline end.
-     * Use document coordinates (not the currently scrolled screen), respecting local clipping so
-     * an already internally contained image is not mistaken for a document overflow owner.
-     *
-     * @param {HTMLElement} composition Normal runtime composition.
-     * @returns {Boolean} Whether this question contributes horizontal document overflow.
-     */
-    const ownsDocumentOverflow = composition => {
-        const root = document.scrollingElement;
-        if (!root || root.scrollWidth <= root.clientWidth + 1) {
-            return false;
-        }
-        const question = composition.closest('.que.clozeonimage');
-        const rtl = window.getComputedStyle(root).direction === 'rtl';
-        const elements = [question, question.querySelector(':scope > .content'),
-            composition.closest('.formulation'), composition,
-            ...composition.querySelectorAll(`${imageSelector}, ${controlSelector}`)];
-        return elements.some(element => {
-            if (!element) {
-                return false;
-            }
-            const rect = visibleRect(element);
-            if (!rect) {
-                return false;
-            }
-            let {left, right} = rect;
-            for (let ancestor = element.parentElement;
-                ancestor && ancestor !== document.body && ancestor !== document.documentElement;
-                ancestor = ancestor.parentElement) {
-                const style = window.getComputedStyle(ancestor);
-                if (style.overflowX !== 'visible' || /\b(paint|content|strict)\b/.test(style.contain)) {
-                    const edge = ancestor.getBoundingClientRect().left + ancestor.clientLeft;
-                    left = Math.max(left, edge);
-                    right = Math.min(right, edge + ancestor.clientWidth);
-                }
-            }
-            // Negative inline-start overflow is not scrollable in LTR (the converse applies in RTL).
-            return right > left && (rtl ? left + window.scrollX < -1 : right + window.scrollX > root.clientWidth + 1);
-        });
-    };
-
-    /**
-     * An explicit Wide request also contains this page's other overflowing Cloze on Image questions.
-     * Re-measure after each conversion. Each snapshot member is attempted at most once, so even
-     * unrelated overflow or a question that cannot activate cannot keep this loop running.
-     * Restoration, AJAX, resize and drawer observers deliberately do not call this coordinator.
-     *
-     * @param {HTMLElement} composition Explicitly requested runtime composition.
-     */
-    const requestPanorama = composition => {
-        activatePanorama(composition);
-        if (!panoramas.has(composition)) {
-            return;
-        }
-        const remaining = new Set([...document.querySelectorAll('.que.clozeonimage')]
-            .map(question => question.querySelector(runtimeCompositionSelector))
-            .filter(item => item && item !== composition && !panoramas.has(item)));
-        let next;
-        do {
-            // Complete the new viewport geometry before testing the next Normal question.
-            window.cancelAnimationFrame(frame);
-            updatePanoramas();
-            next = [...remaining].find(ownsDocumentOverflow);
-            if (next) {
-                remaining.delete(next);
-                activatePanorama(next);
-            }
-        } while (next);
-    };
-
-    /**
-     * Remove the temporary track and restore native Moodle layout and pointer behaviour.
-     *
-     * @param {HTMLElement} composition Composition leaving panoramic view.
-     * @param {Boolean} remember Keep the mode for an AJAX replacement of this question.
-     */
-    const deactivatePanorama = (composition, remember = false) => {
-        const state = panoramas.get(composition);
-        if (!state) {
-            return;
-        }
-        const {question, viewport, anchor, track} = state;
-        const focused = document.activeElement;
-        state.stopDrag();
-        viewport.scrollLeft = 0;
-        track.before(composition);
-        track.remove();
-        anchor.before(viewport);
-        anchor.remove();
-        state.restoreViewport();
-        state.restoreComposition();
-        state.viewportAttributes.forEach(([name, value]) => {
-            if (value === null) {
-                viewport.removeAttribute(name);
-            } else {
-                viewport.setAttribute(name, value);
-            }
-        });
-        viewport.classList.remove('qtype-clozeonimage-panorama', 'qtype-clozeonimage-panorama-can-drag');
-        question.classList.remove(activeClass);
-        if (!remember) {
-            activeQuestions.delete(state.questionKey);
-            storedWideView(state.storageKey, false);
-        }
-        updateToggle(question, false);
-        panoramas.delete(composition);
-        // Reconnect observation only to surviving active questions; no stale detached targets.
-        stopObservingPanoramas();
-        if (panoramas.size) {
-            observePanoramas();
-            panoramas.forEach((remaining, item) => {
-                for (let element = remaining.anchor; element; element = element.parentElement) {
-                    geometryObserver?.observe(element);
-                }
-                geometryObserver?.observe(item);
-            });
-            schedulePanoramas();
-        }
-        if (!remember) {
-            window.scrollTo({left: 0, top: window.scrollY, behavior: 'instant'});
-        }
-        if (focused !== viewport && focused?.isConnected && document.activeElement !== focused) {
-            focused.focus({preventScroll: true});
-        }
-    };
-
-    /**
-     * Position only explicit transitions, after queued geometry and resize-observer work has rendered.
-     * A newer mode action supersedes pending positioning; restoration/AJAX never schedules it.
-     *
-     * @param {Function} callback Position/focus work for the latest user action.
-     */
-    const afterModeLayout = callback => {
-        window.cancelAnimationFrame(modePositionFrame);
-        modePositionFrame = window.requestAnimationFrame(() => {
-            modePositionFrame = window.requestAnimationFrame(() => {
-                modePositionFrame = 0;
-                callback();
-            });
-        });
-    };
-
-    /**
-     * Find a native answer in DOM/tab order, excluding hidden sentinels and auxiliary controls.
-     *
-     * @param {HTMLElement} question Question returning to Normal view.
-     * @returns {HTMLElement|undefined} First available native answer (readonly text remains eligible).
-     */
-    const firstAnswer = question => {
-        const answers = [...question.querySelectorAll('.qtype-clozeonimage-subquestion input, ' +
-            '.qtype-clozeonimage-subquestion select, .qtype-clozeonimage-subquestion textarea')]
-            .filter(element => !element.matches(':disabled, [type="hidden"], [type="button"], [type="submit"], ' +
-                '[type="reset"], [type="image"]') && element.tabIndex >= 0 && visibleRect(element) &&
-                !element.closest('[inert], .qtype-clozeonimage-clear-choice, .qtype-clozeonimage-review-surface'));
-        return answers.find(element => element.type !== 'radio' || !element.name || element.checked ||
-            !answers.some(other => other.type === 'radio' && other.name === element.name &&
-                other.form === element.form && other.checked));
-    };
-
-    /**
-     * Compensate only the visual Y displacement caused by mode reflow, including nested page scrollers.
-     * Native scroll limits still apply; no animation or horizontal repositioning is introduced here.
-     *
-     * @param {HTMLElement} element Persistent focused control.
-     * @param {Number} top Its viewport Y before exit.
-     */
-    const preserveVerticalContext = (element, top) => {
-        for (let parent = element.parentElement; parent && parent !== document.scrollingElement;
-                parent = parent.parentElement) {
-            if (parent.scrollHeight > parent.clientHeight && /auto|scroll/.test(getComputedStyle(parent).overflowY)) {
-                parent.scrollBy({top: element.getBoundingClientRect().top - top, behavior: 'instant'});
-            }
-        }
-        window.scrollBy({top: element.getBoundingClientRect().top - top, behavior: 'instant'});
-    };
-
-    /** Exit all rendered Wide questions; absent quiz pages retain their own attempt state. */
-    const exitPanoramas = () => {
-        [...panoramas.keys()].forEach(composition => {
-            if (composition.isConnected) {
-                deactivatePanorama(composition);
-            }
-        });
-    };
-
-    /** Register lightweight delegated controls and AJAX lifecycle detection once per page. */
-    const initialiseModeControls = () => {
-        if (modeControlsInitialised) {
-            return;
-        }
-        modeControlsInitialised = true;
-        document.addEventListener('click', event => {
-            const button = event.target.closest(toggleSelector);
-            if (!button) {
-                return;
-            }
-            const question = button.closest('.que.clozeonimage');
-            const composition = question?.querySelector(runtimeCompositionSelector);
-            if (composition) {
-                const entering = !panoramas.has(composition);
-                if (!entering) {
-                    exitPanoramas();
-                } else {
-                    requestPanorama(composition);
-                }
-                afterModeLayout(() => {
-                    if (!button.isConnected || panoramas.has(composition) !== entering) {
-                        return;
-                    }
-                    button.scrollIntoView({block: 'end', inline: 'nearest', behavior: 'instant'});
-                    // Native keyboard/assistive activation has no pointer click count.
-                    if (entering && event.detail === 0 && document.activeElement === button) {
-                        panoramas.get(composition)?.viewport.focus({preventScroll: true});
-                    }
-                });
-            }
-        });
-        // Window bubbling runs after document-level feedback handlers, regardless of AMD load order.
-        window.addEventListener('keydown', event => {
-            if (event.key !== 'Escape' || event.defaultPrevented) {
-                return;
-            }
-            if ([...panoramas.keys()].some(composition => composition.isConnected)) {
-                event.preventDefault();
-                const focused = document.activeElement;
-                const focusedFrame = [...panoramas.values()].find(state => state.viewport === focused);
-                const top = focused.getBoundingClientRect().top;
-                exitPanoramas();
-                const restoreContext = () => {
-                    if (focusedFrame?.question.isConnected &&
-                            [focused, document.body].includes(document.activeElement)) {
-                        // All-disabled review questions fall back to the local toggle, without end-aligning it.
-                        const target = firstAnswer(focusedFrame.question) || focusedFrame.question.querySelector(toggleSelector);
-                        target.focus({preventScroll: true});
-                        target.scrollIntoView({block: 'nearest', inline: 'nearest', behavior: 'instant'});
-                    } else if (focused.isConnected && focused !== document.body && document.activeElement === focused) {
-                        preserveVerticalContext(focused, top);
-                    }
-                };
-                // Compensate the synchronous Info reflow before paint, then check once after layout work settles.
-                if (!focusedFrame) {
-                    restoreContext();
-                }
-                afterModeLayout(restoreContext);
-            }
-        });
-        const lifecycle = new window.MutationObserver(records => {
-            // Recheck layouts only when composition elements are added or removed; init is idempotent.
-            const changed = records.some(record => [...record.addedNodes, ...record.removedNodes].some(node =>
-                node.nodeType === 1 && (node.matches(compositionSelector) || node.querySelector(compositionSelector))));
-            if (changed) {
-                init();
-            }
-        });
-        lifecycle.observe(document.body, {subtree: true, childList: true});
-    };
-
-    /**
-     * Reveal the server-rendered localized button and restore a remembered AJAX view.
-     *
-     * @param {HTMLElement} composition Runtime or teacher preview composition.
-     */
-    const initPanorama = composition => {
-        if (!composition.matches(runtimeCompositionSelector)) {
-            return;
-        }
-        const question = composition.closest('.que.clozeonimage');
-        if (!question) {
-            return;
-        }
-        initialiseModeControls();
-        updateToggle(question, panoramas.has(composition));
-        const key = questionStateKey(question);
-        if (activeQuestions.has(key) || storedWideView(attemptStorageKey(question))) {
-            activatePanorama(composition);
-        }
+        event.preventDefault();
+        // Boost creates this pending operation before dispatching hide, but its canceled path
+        // returns without resolving it. Complete that canceled operation via Moodle's API.
+        Pending.complete('theme_boost/drawers:close');
     };
 
     /**
@@ -874,27 +206,320 @@ define([], function() {
     };
 
     /**
-     * Set a composition's height to include its image and every control below it.
+     * Minimum outer width for in-flow responses, independent of their authored CSS offsets.
+     * The normal padding already contains the 4px result outline and its 1px offset.
+     * Text/images intentionally positioned outside the block do not impose a width limit.
+     *
+     * @param {HTMLElement} block A rendered block.
+     * @returns {Number} Minimum border-box width, or zero for an automatic block.
+     */
+    const minimumBlockWidth = block => {
+        if (block.classList.contains('qtype-clozeonimage-block-auto')) {
+            return 0;
+        }
+        const controls = [...block.querySelectorAll('.qtype-clozeonimage-control')];
+        const widths = controls.filter(control => control.getClientRects().length)
+            .map(control => control.getBoundingClientRect().width);
+        const style = getComputedStyle(block);
+        const number = property => parseFloat(style[property]) || 0;
+        const clearance = widths.length ? 5 : 0;
+        const sides = number('borderLeftWidth') + number('borderRightWidth') +
+            Math.max(clearance, number('paddingLeft')) + Math.max(clearance, number('paddingRight'));
+        return Math.max(40, Math.ceil(Math.max(0, ...widths) + sides));
+    };
+
+    /**
+     * Apply the same minimum in attempts/reviews, retaining the selected outer anchor.
+     * Keep the saved manual width as the requested width; only the effective minimum changes.
+     *
+     * @param {HTMLElement} block Student block.
+     */
+    const fitRuntimeBlock = block => {
+        if (!block.getClientRects().length) {
+            return;
+        }
+        const rect = block.getBoundingClientRect();
+        const previous = blockGeometry.get(block) || {width: rect.width, height: rect.height};
+        const anchor = Number(block.dataset.anchor ?? 4);
+        const left = parseFloat(block.style.left) || 0;
+        const top = parseFloat(block.style.top) || 0;
+        block.style.minWidth = `${minimumBlockWidth(block)}px`;
+        const current = block.getBoundingClientRect();
+        block.style.left = `${left + (anchor % 3) / 2 * (previous.width - current.width)}px`;
+        block.style.top = `${top + Math.floor(anchor / 3) / 2 * (previous.height - current.height)}px`;
+        blockGeometry.set(block, {width: current.width, height: current.height});
+    };
+
+    /**
+     * Place the unchanged image coordinate system inside a normal-view track.
+     * @param {HTMLElement} composition Student composition.
+     * @param {Object} bounds Persistent content bounds.
+     */
+    const placeNormal = (composition, bounds) => {
+        const viewport = composition.closest('.qtype-clozeonimage-scroll');
+        if (!viewport) {
+            return;
+        }
+        let state = normalPlacements.get(composition);
+        if (!state) {
+            const track = document.createElement('div');
+            track.className = 'qtype-clozeonimage-normal-track';
+            composition.before(track);
+            track.append(composition);
+            state = {track, gutterX: bounds.minX < 0 ? 8 : 0, gutterY: bounds.minY < 0 ? 8 : 0};
+            normalPlacements.set(composition, state);
+        }
+        // Capture the initial margin once; later size changes move the image, never this corner.
+        const geometry = scrollGeometry(viewport.clientWidth, bounds, viewport.scrollLeft, state.gutterX);
+        state.x = geometry.space;
+        state.y = state.gutterY - bounds.minY;
+        state.bounds = bounds;
+        composition.style.marginLeft = `${state.x}px`;
+        composition.style.marginTop = `${state.y}px`;
+        state.track.style.width = `${state.x + bounds.maxX}px`;
+        state.track.style.height = `${state.y + bounds.maxY}px`;
+    };
+
+    /**
+     * Visible screen area, excluding fixed drawers, navigation and clipping ancestors.
+     * @param {HTMLElement} input Active answer.
+     */
+    const answerViewport = input => {
+        const visual = window.visualViewport;
+        const area = {left: visual?.offsetLeft || 0, top: visual?.offsetTop || 0,
+            right: (visual?.offsetLeft || 0) + (visual?.width || document.documentElement.clientWidth),
+            bottom: (visual?.offsetTop || 0) + (visual?.height || window.innerHeight)};
+        const drawers = [...document.querySelectorAll(drawerSelector)].map(element => {
+            const rect = visibleRect(element);
+            return rect && {...rect, side: element.matches('.drawer-left, #nav-drawer') ? 'left' : 'right'};
+        }).filter(rect => rect && rect.bottom > area.top && rect.top < area.bottom);
+        Object.assign(area, drawerBounds(area.left, area.right, drawers));
+        document.querySelectorAll('.navbar.fixed-top').forEach(element => {
+            const rect = visibleRect(element);
+            if (rect && rect.top <= area.top) {
+                area.top = Math.max(area.top, rect.bottom);
+            }
+        });
+        for (let parent = input.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
+            const style = getComputedStyle(parent);
+            const rect = parent.getBoundingClientRect();
+            if (style.overflowX !== 'visible' && parent.clientWidth) {
+                area.left = Math.max(area.left, rect.left + parent.clientLeft);
+                area.right = Math.min(area.right, rect.left + parent.clientLeft + parent.clientWidth);
+            }
+            if (style.overflowY !== 'visible' && parent.clientHeight) {
+                area.top = Math.max(area.top, rect.top + parent.clientTop);
+                area.bottom = Math.min(area.bottom, rect.top + parent.clientTop + parent.clientHeight);
+            }
+        }
+        return {left: area.left + 8, right: area.right - 8, top: area.top + 8, bottom: area.bottom - 8};
+    };
+
+    /**
+     * Minimum translation of a fitting interval; an oversized target uses its input/caret instead.
+     * @param {Number} start Target start.
+     * @param {Number} end Target end.
+     * @param {Number} low Visible start.
+     * @param {Number} high Visible end.
+     */
+    const visibilityShift = (start, end, low, high) => start < low ? low - start : end > high ? high - end : 0;
+
+    /**
+     * Current insertion/selection endpoint, measured with the actual input font and internal scroll.
+     * @param {HTMLInputElement} input Active answer.
+     */
+    const caretX = input => {
+        if (!caretProbe) {
+            caretProbe = document.createElement('span');
+            caretProbe.className = 'qtype-clozeonimage-field-measure';
+            caretProbe.setAttribute('aria-hidden', 'true');
+            document.body.append(caretProbe);
+        }
+        const style = getComputedStyle(input);
+        ['fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'fontStretch', 'fontVariant',
+            'fontFeatureSettings', 'fontVariationSettings', 'letterSpacing', 'textTransform'].forEach(property => {
+            caretProbe.style[property] = style[property];
+        });
+        const endpoint = input.selectionDirection === 'backward' ? input.selectionStart : input.selectionEnd;
+        caretProbe.textContent = input.value.slice(0, endpoint ?? input.value.length);
+        const rect = input.getBoundingClientRect();
+        const content = rect.left + input.clientLeft + (parseFloat(style.paddingLeft) || 0);
+        const x = content + caretProbe.getBoundingClientRect().width - input.scrollLeft;
+        return Math.min(rect.right - 4, Math.max(rect.left + 4, x));
+    };
+
+    /**
+     * Remember dimensions without changing focus, selection or the browser's input scroll.
+     * @param {HTMLElement} composition Student composition.
+     */
+    const rememberActive = composition => {
+        const input = document.activeElement;
+        const block = input?.closest('.qtype-clozeonimage-block');
+        if (!input?.matches(adaptiveSelector) || !block || !composition.contains(input)) {
+            return null;
+        }
+        const state = {input, block, field: input.getBoundingClientRect(), box: block.getBoundingClientRect(),
+            area: answerViewport(input), screen: [document.documentElement.clientWidth, window.innerHeight,
+                window.visualViewport?.width, window.visualViewport?.height]};
+        activeGeometry.set(composition, state);
+        return state;
+    };
+
+    /**
+     * Move only as far as necessary after growth, prioritising the active field in oversized blocks.
+     * @param {HTMLElement} composition Student composition.
+     */
+    const keepActiveVisible = composition => {
+        const previous = activeGeometry.get(composition);
+        const edited = activeEdits.has(composition);
+        activeEdits.delete(composition);
+        const current = rememberActive(composition);
+        if (!current || !previous || previous.input !== current.input) {
+            return;
+        }
+        const {input, block, field, box, area} = current;
+        const grew = field.width > previous.field.width + .1 || box.width > previous.box.width + .1 ||
+            box.height > previous.box.height + .1;
+        const resized = current.screen.some((value, index) => value !== previous.screen[index]);
+        const oversized = field.width > area.right - area.left;
+        const shrank = field.width < previous.field.width - .1 || box.width < previous.box.width - .1 ||
+            box.height < previous.box.height - .1;
+        if ((!grew && !shrank && !resized && !(oversized && edited)) ||
+                area.right <= area.left || area.bottom <= area.top) {
+            return;
+        }
+        // Prefer a fitting block; otherwise expose the field or insertion point without recentring.
+        const xTarget = box.width <= area.right - area.left ? box : field;
+        const yTarget = box.height <= area.bottom - area.top ? box : field;
+        const x = field.width > area.right - area.left ? caretX(input) : null;
+        let dx = visibilityShift(x === null ? xTarget.left : x - 4, x === null ? xTarget.right : x + 4,
+            area.left, area.right);
+        let dy = visibilityShift(yTarget.top, yTarget.bottom, area.top, area.bottom);
+        if (Math.abs(dx) < .5 && Math.abs(dy) < .5) {
+            return;
+        }
+        // Visibility uses native scrolling only, independently of the measured composition origin.
+        const scroll = element => {
+            const before = input.getBoundingClientRect();
+            element.scrollBy({left: -dx, top: -dy, behavior: 'instant'});
+            const after = input.getBoundingClientRect();
+            dx -= after.left - before.left;
+            dy -= after.top - before.top;
+        };
+        for (let parent = block; parent && parent !== document.body; parent = parent.parentElement) {
+            if (parent === document.scrollingElement) {
+                break;
+            }
+            if (/auto|scroll/.test(`${getComputedStyle(parent).overflowX} ${getComputedStyle(parent).overflowY}`)) {
+                scroll(parent);
+            }
+        }
+        scroll(window);
+        rememberActive(composition);
+    };
+
+    /**
+     * Map layers to positive ranks without changing DOM, answer or keyboard order.
+     * @param {HTMLElement} composition Coordinate container.
+     */
+    const rankLayers = composition => {
+        const elements = [...composition.querySelectorAll(':scope > [data-layer]')];
+        elements.sort((a, b) => Number(a.dataset.layer) - Number(b.dataset.layer));
+        elements.forEach((element, index) => { element.style.zIndex = String(index + 1); });
+        composition.querySelectorAll('.qtype-clozeonimage-composition-resize').forEach(handle => {
+            handle.style.zIndex = String(elements.length + 2);
+        });
+    };
+
+    /**
+     * Reserve downward space and decorate the image/block union without moving their coordinates.
      *
      * @param {HTMLElement} composition The composition containing the image and controls.
+     * @param {HTMLInputElement|null} editedInput Answer just measured after an input/font event.
      */
-    const updateCompositionHeight = composition => {
-        if (!composition) {
+    const updateCompositionHeight = (composition, editedInput = null) => {
+        if (!composition || composition.dataset.gestureBatch) {
             return;
         }
 
+        if (composition.matches(runtimeCompositionSelector)) {
+            Sticky.prepare(composition);
+            if (editedInput && editedInput === document.activeElement) {
+                activeEdits.add(composition);
+            }
+            composition.querySelectorAll('.qtype-clozeonimage-block').forEach(block => {
+                if (block.dataset.relativeImage && !block.dataset.attachmentInitialised) {
+                    const image = [...composition.querySelectorAll('[data-image-key]')]
+                        .find(item => item.dataset.imageKey === block.dataset.relativeImage);
+                    if (image) {
+                        const point = Geometry.attached({x: parseFloat(image.style.left), y: parseFloat(image.style.top),
+                            width: image.getBoundingClientRect().width, height: image.getBoundingClientRect().height},
+                            {x: Number(block.dataset.relativeX), y: Number(block.dataset.relativeY)},
+                            block.getBoundingClientRect(), Number(block.dataset.anchor));
+                        block.style.left = `${point.x}px`;
+                        block.style.top = `${point.y}px`;
+                        block.dataset.attachmentInitialised = '1';
+                    }
+                }
+                fitRuntimeBlock(block);
+            });
+        }
+        rankLayers(composition);
         const image = composition.querySelector(imageSelector);
-        let requiredHeight = image ? image.getBoundingClientRect().height : 0;
+        const imageRect = image?.getBoundingClientRect();
+        const rectangles = [];
         composition.querySelectorAll(controlSelector).forEach(control => {
-            requiredHeight = Math.max(
-                requiredHeight,
-                control.offsetTop + control.getBoundingClientRect().height
-            );
+            const rect = control.getBoundingClientRect();
+            rectangles.push({left: control.offsetLeft, top: control.offsetTop,
+                right: control.offsetLeft + rect.width, bottom: control.offsetTop + rect.height});
         });
-
-        const height = `${requiredHeight}px`;
+        const bounds = ((composition.matches(runtimeCompositionSelector) || composition.dataset.composition) &&
+            measureContent(composition)?.bounds) ||
+            contentBounds(imageRect?.width || 0, imageRect?.height || 0, rectangles);
+        const surface = composition.querySelector('.qtype-clozeonimage-surface');
+        if (surface) {
+            const base = JSON.parse(composition.dataset.composition);
+            const style = `position:absolute;left:${bounds.minX}px;top:${bounds.minY}px;` +
+                `width:${bounds.maxX - bounds.minX}px;height:${bounds.maxY - bounds.minY}px;background:${base.background};`;
+            if (surface.style.cssText !== style) {
+                surface.style.cssText = style;
+            }
+            composition.dispatchEvent(new CustomEvent('clozeonimage:bounds', {detail: bounds}));
+        }
+        const height = `${Math.max(0, bounds.maxY)}px`;
         if (composition.style.height !== height) {
             composition.style.height = height;
+        }
+        const properties = {
+            left: bounds.minX, top: bounds.minY,
+            width: bounds.maxX - bounds.minX, height: bounds.maxY - bounds.minY,
+        };
+        Object.entries(properties).forEach(([name, value]) => {
+            const property = `--clozeonimage-bound-${name}`;
+            const pixels = `${value}px`;
+            if (composition.style.getPropertyValue(property) !== pixels) {
+                composition.style.setProperty(property, pixels);
+            }
+        });
+        if (composition.matches(runtimeCompositionSelector)) {
+            placeNormal(composition, bounds);
+            Sticky.measure(composition);
+            Sticky.apply(composition, bounds, answerViewport(composition));
+            keepActiveVisible(composition);
+
+        }
+        const track = composition.closest('.qtype-clozeonimage-preview-track');
+        if (track && !composition.dataset.frozenPlacement) {
+            const gutter = 20;
+            track.style.width = `${properties.width + 2 * gutter}px`;
+            track.style.height = `${properties.height + 2 * gutter}px`;
+            composition.style.marginLeft = `${gutter - bounds.minX}px`;
+            composition.style.marginTop = `${gutter - bounds.minY}px`;
+        }
+        const grip = composition.dataset.composition ? null : composition.querySelector('.qtype-clozeonimage-image-resize');
+        if (grip) {
+            grip.style.left = `${imageRect?.width || 0}px`;
+            grip.style.height = `${imageRect?.height || 0}px`;
         }
     };
 
@@ -903,42 +528,118 @@ define([], function() {
      */
     const init = () => {
         if (!drawerOverflowCleanupInitialised) {
+            const updateSticky = () => {
+                layouts.forEach((state, composition) => {
+                    const placement = normalPlacements.get(composition);
+                    if (placement && composition.isConnected) {
+                        Sticky.apply(composition, placement.bounds, answerViewport(composition));
+                    }
+                });
+            };
+            let stickyFrame = 0;
+            const scheduleSticky = event => {
+                Sticky.rememberScroll(event.target);
+                if (!stickyFrame) {
+                    stickyFrame = requestAnimationFrame(() => {
+                        stickyFrame = 0;
+                        updateSticky();
+                    });
+                }
+            };
+            document.addEventListener('scroll', scheduleSticky, true);
+            window.visualViewport?.addEventListener('resize', scheduleSticky);
+            window.visualViewport?.addEventListener('scroll', scheduleSticky);
+            document.addEventListener('transitionend', scheduleSticky);
             document.addEventListener(drawerHiddenEvent, removeStaleDrawerOverflow);
+            document.addEventListener('focusin', event => {
+                answerFocusEvent = event;
+            }, true);
+            document.addEventListener('theme_boost/drawers:hide', preserveAnswerClick);
+            document.addEventListener('focusin', event => {
+                if (event.target.matches?.(adaptiveSelector)) {
+                    const composition = event.target.closest(runtimeCompositionSelector);
+                    if (composition) {
+                        rememberActive(composition);
+                    }
+                }
+            });
             drawerOverflowCleanupInitialised = true;
         }
 
         layouts.forEach((state, composition) => {
             if (!composition.isConnected) {
-                deactivatePanorama(composition, true);
                 state.observer?.disconnect();
+                composition.removeEventListener('load', state.update, true);
                 state.image?.removeEventListener('load', state.update);
+                state.mutations?.disconnect();
+                document.fonts?.removeEventListener('loadingdone', state.update);
+                window.removeEventListener('resize', state.update);
                 layouts.delete(composition);
             }
         });
         document.querySelectorAll(compositionSelector).forEach(composition => {
             if (layouts.has(composition)) {
                 updateCompositionHeight(composition);
-                initPanorama(composition);
                 return;
             }
 
             const update = () => updateCompositionHeight(composition);
             update();
-            initPanorama(composition);
 
             const image = composition.querySelector(imageSelector);
             const state = {image, update};
             layouts.set(composition, state);
-            if (image && !image.complete) {
+            if (composition.matches(runtimeCompositionSelector) || composition.dataset.composition) {
+                composition.addEventListener('load', update, true);
+                document.fonts?.ready.then(update);
+                document.fonts?.addEventListener('loadingdone', update);
+                window.addEventListener('resize', update);
+            } else if (image && !image.complete) {
                 image.addEventListener('load', update, {once: true});
             }
 
             if (window.ResizeObserver) {
-                const observer = new window.ResizeObserver(update);
+                let frame = 0;
+                const schedule = () => {
+                    if (!frame) {
+                        frame = requestAnimationFrame(() => {
+                            frame = 0;
+                            update();
+                        });
+                    }
+                };
+                const observer = new window.ResizeObserver(schedule);
                 if (image) {
                     observer.observe(image);
                 }
-                composition.querySelectorAll(controlSelector).forEach(control => observer.observe(control));
+                const observed = new Set();
+                const watch = () => {
+                    observed.forEach(element => {
+                        if (!element.isConnected) {
+                            observer.unobserve(element);
+                            observed.delete(element);
+                        }
+                    });
+                    composition.querySelectorAll(controlSelector).forEach(control => {
+                        const descendants = composition.matches(runtimeCompositionSelector) || composition.dataset.composition
+                            ? '*' : '.qtype-clozeonimage-control';
+                        // Sticky outer boxes are temporary viewports. Observe their natural content instead.
+                        [control, ...control.querySelectorAll(descendants)].filter(element => !element.closest(transientSelector) &&
+                            !element.querySelector(':scope > .qtype-clozeonimage-sticky-content'))
+                            .forEach(element => {
+                            if (!observed.has(element)) {
+                                observed.add(element);
+                                observer.observe(element);
+                            }
+                        });
+                    });
+                };
+                watch();
+                state.mutations = new MutationObserver(() => {
+                    watch();
+                    schedule();
+                });
+                state.mutations.observe(composition, {subtree: true, childList: true, characterData: true});
                 state.observer = observer;
             }
         });
@@ -947,8 +648,12 @@ define([], function() {
     return {
         init,
         updateCompositionHeight,
-        panGeometry,
+        minimumBlockWidth,
+        measureContent,
+        rankLayers,
+        visibilityShift,
         contentBounds,
+        scrollGeometry,
         drawerBounds,
     };
 });

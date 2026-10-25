@@ -365,7 +365,7 @@ final class lifecycle_test extends \advanced_testcase {
         $dom = new \DOMDocument();
         @$dom->loadHTML($html);
         $xpath = new \DOMXPath($dom);
-        $this->assertSame(self::SOURCES[6], $xpath->query('//textarea[@name="subquestion[0]"]')->item(0)->textContent);
+        $this->assertSame(self::SOURCES[6], $xpath->query('//textarea[@name="subquestion[0][text]"]')->item(0)->textContent);
         $this->assertSame('1', $xpath->query('//input[@name="roworigin[0]"]')->item(0)->getAttribute('value'));
         $this->assertSame(7, $xpath->query('//button[@data-drag-type="move"]')->length);
     }

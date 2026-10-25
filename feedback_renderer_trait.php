@@ -170,6 +170,8 @@ trait qtype_clozeonimage_feedback_renderer_trait {
         $attributes['data-bs-content'] = $feedbackcontents;
         $attributes['data-bs-placement'] = 'right';
         $attributes['data-bs-trigger'] = 'hover focus';
+        // Immediate feedback can replace an instance while a Bootstrap fade callback is still pending.
+        $attributes['data-bs-animation'] = 'false';
         $attributes['data-bs-html'] = 'true';
         $attributes['data-bs-custom-class'] = $this->feedbackpopoverclass;
         return $attributes;

@@ -64,21 +64,24 @@ class qtype_clozeonimage_textfield_renderer extends qtype_multianswer_subq_rende
             }
         }
 
-        // Keep the positioned control's width stable when a submitted response is rendered again.
-        $size = 1;
-        foreach ($subq->answers as $ans) {
-            $size = max($size, core_text::strlen(trim($ans->answer)));
-        }
-        $size = min(60, $size);
-
+        $width = $qa->get_question()->fieldwidths[$index] ?? null;
         $inputattributes = [
             'type' => 'text',
             'name' => $qa->get_qt_field_name($fieldname),
             'value' => $response,
             'id' => $qa->get_qt_field_name($fieldname),
-            'size' => $size,
             'class' => 'form-control d-inline mb-1',
-        ];
+        ] + \qtype_clozeonimage\local\field_width::attributes($width);
+        if (!$width) {
+            // Keep the original stable calculation only for fields without explicit dimensions.
+            $size = 1;
+            foreach ($subq->answers as $ans) {
+                $size = max($size, core_text::strlen(trim($ans->answer)));
+            }
+            $inputattributes['size'] = min(60, $size);
+        } else if ($width['adaptive']) {
+            $this->page->requires->js_call_amd('qtype_clozeonimage/field_width', 'init');
+        }
         $validationerror = '';
         if ($subq->qtype->name() === 'numerical' && $qa->get_state() == question_state::$invalid) {
             $subresponse = ['answer' => $response];
@@ -127,7 +130,7 @@ class qtype_clozeonimage_textfield_renderer extends qtype_multianswer_subq_rende
         );
         $inputattributes = $this->feedback_trigger_attributes($inputattributes, $feedbackpopup);
 
-        $regionclass = 'subquestion qtype-clozeonimage-feedback-region';
+        $regionclass = 'subquestion qtype-clozeonimage-feedback-region qtype-clozeonimage-control';
         if ($stateclass !== '') {
             $regionclass .= ' qtype-clozeonimage-state-' . $stateclass;
         }
@@ -139,16 +142,19 @@ class qtype_clozeonimage_textfield_renderer extends qtype_multianswer_subq_rende
             'for' => $inputattributes['id'],
         ]);
         $output .= html_writer::empty_tag('input', $inputattributes);
-        $output .= html_writer::end_tag('span');
         if ($validationerror !== '') {
-            $output .= html_writer::div(
-                $validationerror,
+            $this->page->requires->js_call_amd('qtype_clozeonimage/numerical_validation', 'init');
+            $output .= html_writer::span(
+                html_writer::span('↑', 'qtype-clozeonimage-validation-arrow', ['aria-hidden' => 'true']) .
+                    $validationerror,
                 'validationerror qtype-clozeonimage-numerical-validation',
                 [
                 'id' => $inputattributes['id'] . '-error',
+                'data-clozeonimage-validation-for' => $inputattributes['id'],
                 ]
             );
         }
+        $output .= html_writer::end_tag('span');
         return $output;
     }
 }

@@ -109,7 +109,7 @@ class qtype_clozeonimage_multichoice_inline_renderer extends qtype_multianswer_m
             $inputattributes = $this->feedback_trigger_attributes($inputattributes, $feedbackpopup);
         }
 
-        $regionclass = 'subquestion qtype-clozeonimage-feedback-region';
+        $regionclass = 'subquestion qtype-clozeonimage-feedback-region qtype-clozeonimage-control';
         if ($stateclass !== '') {
             $regionclass .= ' qtype-clozeonimage-state-' . $stateclass;
         }

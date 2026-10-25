@@ -83,6 +83,26 @@ final class diagnostic_test extends \advanced_testcase {
         $this->assertSame([], $diagnostics);
     }
 
+    /** A malformed width must keep its precise diagnostic even if no active child remains. */
+    public function test_invalid_field_width_keeps_diagnostic_in_each_zone(): void {
+        [$form, $category, $draft] = $this->make_form();
+        foreach (['questiontext', 'aftertext', 'block'] as $zone) {
+            $data = ['category' => $category->id,
+                'questiontext' => ['text' => '', 'format' => FORMAT_HTML],
+                'aftertext' => ['text' => '', 'format' => FORMAT_HTML],
+                'bgimage' => $draft, 'displaywidth' => 1, 'subquestion' => []];
+            $source = '{1:SHORTANSWER(150px,100px):=Paris}';
+            if ($zone === 'block') {
+                $data['subquestion'] = [$source];
+            } else {
+                $data[$zone]['text'] = $source;
+            }
+            $errors = $form->validation($data, []);
+            $this->assertStringContainsString(get_string('fieldwidthorder', 'qtype_clozeonimage'),
+                $errors[$zone === 'block' ? 'subquestionrow[0]' : $zone]);
+        }
+    }
+
     public function test_blank_intermediate_row_has_no_diagnostic(): void {
         [$wrapped, $diagnostics] = \qtype_clozeonimage::diagnose_subquestion_source(" \n ");
 
@@ -356,22 +376,15 @@ final class diagnostic_test extends \advanced_testcase {
             'subquestion' => ['{1:SHORTANSWER:=Paris~Marseille}'],
         ], []);
 
-        if ($expectederror === null) {
-            $this->assertArrayNotHasKey('displaywidthgroup', $errors);
-        } else if ($expectederror === 'vector') {
-            $this->assertSame(
-                get_string('displaywidthminimum', 'qtype_clozeonimage', 200),
-                $errors['displaywidthgroup']
-            );
-        } else {
-            $this->assertSame(
-                get_string('displaywidthrange', 'qtype_clozeonimage', (object) [
-                    'min' => min(200, $reportedwidth),
-                    'max' => $reportedwidth,
-                ]),
-                $errors['displaywidthgroup']
-            );
-        }
+        // Format 2 allows explicit upscaling; intrinsic dimensions constrain insertion only.
+        $images = \qtype_clozeonimage\local\composition::images((object)[
+            'sceneimage' => [$draftitemid], 'imagewidth' => [$displaywidth]]);
+        $image = reset($images);
+        $this->assertEquals($displaywidth, $image->width);
+        $this->assertGreaterThan(0, $image->height);
+        $initial = \qtype_clozeonimage\local\composition::images((object)['sceneimage' => [$draftitemid]]);
+        $this->assertLessThanOrEqual($reportedwidth, reset($initial)->width);
+        $this->assertArrayNotHasKey('compositiondimensions', $errors);
     }
 
     /**
@@ -449,14 +462,13 @@ final class diagnostic_test extends \advanced_testcase {
             'displaywidth' => $displaywidth,
             'subquestion' => ['{1:SHORTANSWER:=Paris~Marseille}'],
         ], []);
-        if ($valid) {
-            $this->assertArrayNotHasKey('displaywidthgroup', $errors);
-        } else {
-            $this->assertSame(get_string('displaywidthrange', 'qtype_clozeonimage', (object) [
-                'min' => min(200, $intrinsicwidth),
-                'max' => $intrinsicwidth,
-            ]), $errors['displaywidthgroup']);
-        }
+        $images = \qtype_clozeonimage\local\composition::images((object)[
+            'sceneimage' => [$draftitemid], 'imagewidth' => [$displaywidth]]);
+        $image = reset($images);
+        $this->assertEquals($displaywidth, $image->width);
+        $intrinsicheight = in_array($orientation, [5, 6, 7, 8], true) ? $rawwidth : $rawheight;
+        $this->assertEqualsWithDelta($displaywidth * $intrinsicheight / $intrinsicwidth, $image->height, .001);
+        $this->assertArrayNotHasKey('compositiondimensions', $errors);
         // The server preview fallback must agree with the range derived from naturalWidth in form.js.
         $_POST['bgimage'] = $draftitemid;
         try {
@@ -513,6 +525,10 @@ final class diagnostic_test extends \advanced_testcase {
         );
         $this->assertSame(
             [
+                [
+                    'value' => \qtype_clozeonimage::CONTROL_APPEARANCE_TRANSPARENT,
+                    'text' => get_string('controlappearancetransparent', 'qtype_clozeonimage'),
+                ],
                 [
                     'value' => \qtype_clozeonimage::CONTROL_APPEARANCE_TRANSLUCENT,
                     'text' => get_string('controlappearancetranslucent', 'qtype_clozeonimage'),
@@ -581,7 +597,7 @@ final class diagnostic_test extends \advanced_testcase {
      */
     #[\PHPUnit\Framework\Attributes\DataProvider('valid_sources_provider')]
     public function test_preview_appearance_for_every_family(string $source): void {
-        foreach ([0 => 'translucent', 1 => 'opaque'] as $appearance => $suffix) {
+        foreach ([2 => 'transparent', 0 => 'translucent', 1 => 'opaque'] as $appearance => $suffix) {
             [$form] = $this->make_form([
                 'controlappearance' => $appearance,
                 'subquestion' => [$source],
@@ -593,7 +609,8 @@ final class diagnostic_test extends \advanced_testcase {
             $xpath = new \DOMXPath($dom);
             $composition = $xpath->query('//*[@id="qtype-clozeonimage-preview-composition"]')->item(0);
             $this->assertSame(
-                'qtype-clozeonimage-preview-composition qtype-clozeonimage-appearance-' . $suffix,
+                'qtype-clozeonimage-preview-composition qtype-clozeonimage-appearance-' . $suffix .
+                    ' qtype-clozeonimage-block-appearance-transparent',
                 $composition->getAttribute('class')
             );
             $controls = $xpath->query('.//input | .//select', $composition);
@@ -601,7 +618,8 @@ final class diagnostic_test extends \advanced_testcase {
             foreach ($controls as $control) {
                 $this->assertTrue($control->hasAttribute('disabled'));
             }
-            $this->assertCount(1, $xpath->query('.//div[@style="left:17px;top:29px;"]', $composition));
+            $this->assertCount(1, $xpath->query('.//div[@style="left:17px;top:29px;" ' .
+                'and contains(@class, "qtype-clozeonimage-block-auto")]', $composition));
         }
     }
 
@@ -630,7 +648,7 @@ final class diagnostic_test extends \advanced_testcase {
 
         foreach ($row->getElements() as $element) {
             if ($element->getName() === 'subquestion[3]') {
-                $sourcehtml = $element->toHtml();
+                $sourcehtml = $form->render();
             } else if (
                 $element instanceof \HTML_QuickForm_html &&
                     str_contains($element->toHtml(), 'qtype-clozeonimage-anchor-area')
@@ -644,7 +662,7 @@ final class diagnostic_test extends \advanced_testcase {
         }
 
         $this->assertStringContainsString(
-            'aria-label="' . get_string('sourceforsubquestion', 'qtype_clozeonimage', 4) . '"',
+            get_string('sourceforsubquestion', 'qtype_clozeonimage', 4),
             $sourcehtml
         );
         $this->assertStringContainsString(
@@ -730,7 +748,7 @@ final class diagnostic_test extends \advanced_testcase {
         );
         $renderedform = $form->render();
         $this->assertStringContainsString(
-            '<span class="visually-hidden">Subquestion 4: </span>' .
+            '<span class="visually-hidden">' . get_string('subquestionno', 'qtype_clozeonimage', 4) . ': </span>' .
                 get_string('answermustbenumberorstar', 'qtype_numerical'),
             $renderedform
         );
@@ -744,7 +762,7 @@ final class diagnostic_test extends \advanced_testcase {
     public function test_reordered_rows_survive_preview_and_add_rows(): void {
         $sources = ['{1:NUMERICAL:=42:0}', '', '{1:SHORTANSWER:=Owl}'];
         foreach (['updatepreview', 'addsubquestions'] as $action) {
-            $request = ['nosubquestions' => 3, $action => 1, 'subquestion' => $sources,
+            $request = ['nosubquestions' => 3, $action => 1, 'subquestion' => array_map(fn($source) => ['text' => $source, 'format' => FORMAT_HTML], $sources),
                 'roworigin' => [3, 2, 1], 'xleft' => [-20, 0, 75], 'ytop' => [84, 0, -30],
                 'anchor' => [8, -1, 0], '_qf__qtype_clozeonimage_edit_form' => 1];
             [$form] = $this->make_form($request);
@@ -754,7 +772,7 @@ final class diagnostic_test extends \advanced_testcase {
             $xpath = new \DOMXPath($dom);
             $expectedcount = $action === 'addsubquestions' ? 6 : 3;
             $this->assertSame($expectedcount, $xpath->query('//button[@data-drag-type="move"]')->length);
-            $this->assertSame($sources[0], $xpath->query('//textarea[@name="subquestion[0]"]')->item(0)->textContent);
+            $this->assertSame($sources[0], $xpath->query('//textarea[@name="subquestion[0][text]"]')->item(0)->textContent);
             $this->assertSame('3', $xpath->query('//input[@name="roworigin[0]"]')->item(0)->getAttribute('value'));
             $this->assertSame('-20', $xpath->query('//input[@name="xleft[0]"]')->item(0)->getAttribute('value'));
             $this->assertSame('8', $xpath->query('//input[@name="anchor[0]" and @checked]')->item(0)->getAttribute('value'));
@@ -764,25 +782,34 @@ final class diagnostic_test extends \advanced_testcase {
         }
     }
 
-    public function test_column_headings_contain_help_without_standalone_instruction(): void {
+    public function test_blocks_header_contains_grouped_help_without_obsolete_columns(): void {
         [$form] = $this->make_form();
         $quickform = $this->get_quickform($form);
         $html = $form->render();
 
         $this->assertFalse($quickform->elementExists('subquestionhelp'));
-        $this->assertStringContainsString(get_string('sourcecolumn_help', 'qtype_clozeonimage'), $html);
-        $this->assertStringContainsString(get_string('left_help', 'qtype_clozeonimage'), $html);
-        $this->assertStringContainsString(get_string('top_help', 'qtype_clozeonimage'), $html);
-        $this->assertStringContainsString(get_string('anchor_help', 'qtype_clozeonimage'), $html);
-        $this->assertSame(1, substr_count($html, get_string('sourcecolumn_help', 'qtype_clozeonimage')));
-        $this->assertStringContainsString(
-            'alt="' . get_string('backgroundimagealt', 'qtype_clozeonimage') .
-                '" class="qtype-clozeonimage-preview-image"',
-            $html
-        );
-        $this->assertStringNotContainsString(
-            'alt="" class="qtype-clozeonimage-preview-image"',
-            $html
-        );
+        $dom = new \DOMDocument();
+        @$dom->loadHTML($html);
+        $xpath = new \DOMXPath($dom);
+        $help = $xpath->query('//fieldset[@id="id_subquestionsheader"]//a[@data-bs-custom-class="help-popover"]');
+        // Blocks heading plus the two relocated background controls retain their standard help.
+        $this->assertCount(3, $help);
+        $content = $help->item(0)->getAttribute('data-bs-content');
+        $normalise = static fn($text) => trim(preg_replace('/\s+/', ' ', strip_tags($text)));
+        $this->assertSame($normalise(get_string('subquestionsheader_help', 'qtype_clozeonimage')),
+                $normalise($content));
+        foreach (['TYPE(150px)', 'TYPE(8em,16em)', 'nine anchors', 'precise internal values',
+                'Position relative to', '-2147483648', 'answer order'] as $guidance) {
+            $this->assertStringContainsString($guidance, $content);
+        }
+        $headings = $xpath->query('//div[contains(@class,"qtype-clozeonimage-column-headings")]');
+        $this->assertCount(1, $headings);
+        $this->assertSame('', trim($headings->item(0)->textContent));
+        $this->assertCount(1, $xpath->query('//div[contains(@class,"qtype-clozeonimage-column-headings")]'
+                . '//input[@data-action="select-all-blocks" and @aria-label]'));
+        $this->assertStringContainsString('data-composition=', $html);
+        $this->assertStringContainsString('name="sceneimage[0]"', $html);
+        $this->assertStringNotContainsString('name="bgimage"', $html);
+
     }
 }
